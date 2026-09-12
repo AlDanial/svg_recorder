@@ -1,0 +1,36 @@
+[project]
+name = "svg-recorder"
+version = "0.1.0"
+description = "Record a terminal session as a small animated SVG."
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "Al Danial", email = "al.danial@gmail.com"}]
+keywords = ["svg", "recorder", "animation", "terminal"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Topic :: Terminals",
+]
+dependencies = ["pyte>=0.8.0", "wcwidth>=0.2"]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov"]
+
+[project.scripts]
+svg_recorder = "svg_recorder.cli:main"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

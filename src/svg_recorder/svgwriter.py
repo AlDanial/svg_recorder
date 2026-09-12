@@ -101,32 +101,32 @@ class SvgWriter:
                     out.append(f'<rect x="{ox + i * cw}" y="{oy + ri * ch}" width="{(j - i) * cw}" '
                                f'height="{ch}" class="{self._bg.get(bg)}"/>')
                 i = j
-        # text runs per row: list of (class, text)
-        row_markup: list[list[tuple[str, str]]] = []
+        # text runs per row: list of (class, text, cell_count) -- cell_count counts
+        # continuation cells (char == "") so textLength always spans the run's cells.
+        row_markup: list[list[tuple[str, str, int]]] = []
         for row in p.rows:
-            runs: list[tuple[str, str]] = []
+            runs: list[list] = []
             for c in row:
                 fg, _ = self._colors(c)
                 cls = self._text_class(c, fg)
                 if runs and runs[-1][0] == cls:
-                    runs[-1] = (cls, runs[-1][1] + c.char)
+                    runs[-1][1] += c.char
+                    runs[-1][2] += 1
                 else:
-                    runs.append((cls, c.char))
-            row_markup.append(runs)
+                    runs.append([cls, c.char, 1])
+            row_markup.append([tuple(run) for run in runs])
         if len(p.rows) == 1 and len(row_markup[0]) == 1:
-            cls, text = row_markup[0][0]
+            cls, text, _ncells = row_markup[0][0]
             attr = f' class="{cls}"' if cls else ""
             out.append(f'<text x="{ox}" y="{oy + BASELINE}" textLength="{width_px}"{attr}>{_esc(text)}</text>')
             return "".join(out)
         parts = [f'<text x="{ox}" y="{oy + BASELINE}">']
         for ri, runs in enumerate(row_markup):
-            for k, (cls, text) in enumerate(runs):
+            for k, (cls, text, ncells) in enumerate(runs):
                 attrs = ""
-                if k == 0:
-                    if ri > 0:
-                        attrs += f' x="{ox}" dy="{ch}"'
-                    if len(runs) == 1:
-                        attrs += f' textLength="{width_px}"'
+                if k == 0 and ri > 0:
+                    attrs += f' x="{ox}" y="{oy + ri * ch + BASELINE}"'
+                attrs += f' textLength="{ncells * cw}"'
                 if cls:
                     attrs += f' class="{cls}"'
                 parts.append(f"<tspan{attrs}>{_esc(text)}</tspan>")
@@ -141,6 +141,7 @@ class SvgWriter:
         last_t = self._frames[-1][0] if self._frames else 0.0
         if duration is None:
             duration = last_t + self.hold
+        duration = max(duration, last_t, 0.001)
         times: dict[float, str] = {}
 
         def time_class(t: float) -> str:

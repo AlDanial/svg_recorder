@@ -47,7 +47,16 @@ def test_multi_row_patch_uses_tspans():
     w.add_frame(0.0, [patch(1, 0, ["ab", "cd"])])
     svg = w.to_string()
     assert ('<text x="8" y="13"><tspan textLength="16">ab</tspan>'
-            '<tspan x="8" dy="17" textLength="16">cd</tspan></text>') in svg
+            '<tspan x="8" y="30" textLength="16">cd</tspan></text>') in svg
+
+
+def test_middle_blank_row_does_not_shift_later_rows():
+    # A middle row made only of continuation cells (char == "") must not break
+    # dy-based advancement for the rows below it; absolute y avoids the issue.
+    w = SvgWriter(KITTY_DEFAULT, 10, 4)
+    w.add_frame(0.0, [Patch(0, 0, 1, ((cell("a"),), (cell(""),), (cell("b"),)), False)])
+    svg = w.to_string()
+    assert '<tspan x="0" y="47" textLength="8">b</tspan>' in svg
 
 
 def test_styles_become_classes_defined_once():
@@ -61,7 +70,7 @@ def test_styles_become_classes_defined_once():
     assert '.b{font-weight:bold}' in svg
     assert re.search(r'<rect x="16" y="0" width="8" height="17" class="g\d+"/>', svg)
     assert re.search(r'<tspan textLength="24" class="f\d+ b">ab</tspan>', svg) is None
-    assert re.search(r'<tspan class="f\d+ b">ab</tspan><tspan>c</tspan>', svg)
+    assert re.search(r'<tspan textLength="16" class="f\d+ b">ab</tspan><tspan textLength="8">c</tspan>', svg)
 
 
 def test_reverse_swaps_colors():
@@ -103,6 +112,17 @@ def test_no_loop_uses_delays():
     assert '@keyframes s{to{visibility:visible}}' in svg
     assert '.t1{animation-delay:1.25s}' in svg
     assert 'infinite' not in svg
+
+
+def test_duration_clamped_against_zero_and_short_values():
+    w = SvgWriter(KITTY_DEFAULT, 10, 2, loop=True)
+    w.add_frame(0.0, [patch(0, 0, ["a"])])
+    w.add_frame(1.0, [patch(0, 0, ["b"])])
+    svg = w.to_string(duration=0)  # must not raise ZeroDivisionError
+    assert svg
+    svg2 = w.to_string(duration=0.5)  # shorter than last frame time
+    assert '@keyframes a1{0%{visibility:hidden}100%{visibility:visible}}' in svg2
+    assert '200%' not in svg2
 
 
 def test_dedup_moves_repeated_bodies_to_defs():

@@ -9,7 +9,7 @@ import pytest
 
 from svg_recorder.asciicast import read
 from svg_recorder.recorder import RecordError, get_recorder
-from svg_recorder.recorder_posix import PosixRecorder, build_script
+from svg_recorder.recorder_posix import PosixRecorder, build_script, split_utf8_tail
 
 
 class FakeTerminal:
@@ -124,3 +124,32 @@ def test_failed_pre_command_raises(tmp_path):
 
 def test_get_recorder_returns_posix_here():
     assert isinstance(get_recorder(), PosixRecorder)
+
+
+def test_multibyte_character_split_across_reads_is_not_split_across_events(tmp_path):
+    term = FakeTerminal()
+    path = tmp_path / "r.cast"
+    record(term, r"printf '\344\275'; sleep 0.1; printf '\240'", path=path)
+    term.close()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        assert "\\ud" not in line.lower()
+    _, events = read(path)
+    for _, _, data in events:
+        data.decode("utf-8")  # every event stands alone as valid UTF-8
+    out = b"".join(d for _, k, d in events if k == "o")
+    assert out.decode("utf-8") == "你"
+
+
+def test_split_utf8_tail_holds_back_only_incomplete_sequences():
+    assert split_utf8_tail(b"") == (b"", b"")
+    assert split_utf8_tail(b"abc") == (b"abc", b"")
+    assert split_utf8_tail("你".encode()) == ("你".encode(), b"")
+    assert split_utf8_tail(b"a\xe4\xbd") == (b"a", b"\xe4\xbd")
+    assert split_utf8_tail(b"a\xe4") == (b"a", b"\xe4")
+    assert split_utf8_tail(b"a\xf0\x9f\x92") == (b"a", b"\xf0\x9f\x92")
+    assert split_utf8_tail("😀".encode()) == ("😀".encode(), b"")
+    # invalid bytes are not an incomplete tail: they must still be written
+    assert split_utf8_tail(b"a\xff") == (b"a\xff", b"")
+    assert split_utf8_tail(b"a\x80\x80") == (b"a\x80\x80", b"")
+    # a lone continuation run longer than any sequence is not held back
+    assert split_utf8_tail(b"\xbd\xa0") == (b"\xbd\xa0", b"")

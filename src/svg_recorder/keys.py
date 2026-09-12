@@ -24,7 +24,7 @@ _SINGLE = {
 _CTRL_PUNCT = {0x1C: "\\", 0x1D: "]", 0x1E: "^", 0x1F: "_", 0x00: "<Space>"}
 
 
-def _utf8_len(lead: int) -> int:
+def utf8_len(lead: int) -> int:
     if lead < 0x80:
         return 1
     if 0xC2 <= lead <= 0xDF:
@@ -95,7 +95,7 @@ def _parse_one(buf: bytes) -> tuple[str | None, int]:
             return (name, 3) if name else ("<0x1b>", 1)
         if 1 <= b1 <= 26:
             return "<Ctrl>-<Alt>-" + chr(96 + b1), 2
-        n = _utf8_len(b1)
+        n = utf8_len(b1)
         if n == 0:
             return "<0x1b>", 1
         if len(buf) < 1 + n:
@@ -111,7 +111,7 @@ def _parse_one(buf: bytes) -> tuple[str | None, int]:
         return "<Ctrl>-" + chr(96 + b0), 1
     if b0 in _CTRL_PUNCT:
         return "<Ctrl>-" + _CTRL_PUNCT[b0], 1
-    n = _utf8_len(b0)
+    n = utf8_len(b0)
     if n == 0:
         return "<0x%02x>" % b0, 1
     if len(buf) < n:

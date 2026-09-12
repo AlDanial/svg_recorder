@@ -15,6 +15,7 @@ import tty
 from pathlib import Path
 
 from .asciicast import Header, Writer
+from .keys import utf8_len
 from .palette import KITTY_DEFAULT, OSC_QUERY, Palette, apply_osc_replies
 from .recorder import RecordError
 
@@ -23,6 +24,26 @@ def build_script(pre_commands: list[str], command: str | None, shell: str, token
     """The -c script: pre-commands, clear, sentinel, then the command or a shell."""
     parts = list(pre_commands) + ["clear", f"printf '%s' {token}", command or shell]
     return "; ".join(parts)
+
+
+def split_utf8_tail(data: bytes) -> tuple[bytes, bytes]:
+    """Split data into (complete UTF-8 prefix, truncated trailing sequence).
+
+    A pty read can end in the middle of a multibyte character. Only a genuinely
+    incomplete sequence -- at most the last three bytes -- is held back; bytes
+    that are simply not valid UTF-8 stay in the prefix so nothing is dropped.
+    """
+    for back in range(1, min(3, len(data)) + 1):
+        lead = data[-back]
+        if lead < 0x80:
+            break                       # a complete ASCII character ends the buffer
+        if lead < 0xC0:
+            continue                    # continuation byte: keep looking back
+        need = utf8_len(lead)
+        if need and back < need:
+            return data[:-back], data[-back:]
+        break                           # complete, or an invalid lead byte
+    return data, b""
 
 
 def _fileno(stream) -> int:
@@ -147,9 +168,12 @@ class PosixRecorder:
 
     def _shuttle(self, master: int, writer: Writer, first: bytes) -> None:
         t0 = time.monotonic()
+        tail = b""  # a multibyte character straddling two reads
         if first:
             self._write_all(self.term_out, first)
-            writer.write(0.0, "o", first)
+            head, tail = split_utf8_tail(first)
+            if head:
+                writer.write(0.0, "o", head)
         watch_in = True
         while True:
             fds = [master] + ([self.term_in] if watch_in else [])
@@ -157,9 +181,13 @@ class PosixRecorder:
             if master in ready:
                 data = self._read_master(master)
                 if not data:
+                    if tail:
+                        writer.write(time.monotonic() - t0, "o", tail)
                     return
                 self._write_all(self.term_out, data)
-                writer.write(time.monotonic() - t0, "o", data)
+                head, tail = split_utf8_tail(tail + data)
+                if head:
+                    writer.write(time.monotonic() - t0, "o", head)
             if self.term_in in ready:
                 data = self._read_term()
                 if not data:

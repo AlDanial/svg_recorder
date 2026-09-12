@@ -5,7 +5,7 @@ Status: approved in brainstorming, awaiting implementation plan
 
 ## 1. Purpose
 
-`svg_recorder` is a Linux command line tool, written in Python, that records
+`svg_recorder` is a command line tool for Linux and macOS, written in Python, that records
 a terminal session and writes an animated SVG of it. It works like
 `termtosvg` but produces much smaller files. The size win comes from emitting
 only the screen cells that changed between sampled frames, as positioned
@@ -53,6 +53,18 @@ A missing pre-commands file or annotation file, or a malformed annotation
 line, is reported and the tool exits before any pty is created.
 
 ## 3. Recording stage
+
+Recording is the only platform-dependent stage. It sits behind a small
+`Recorder` interface with one method, `record(command, pre_commands) -> path`,
+so a Windows backend can be added later without touching any other module.
+The first implementation is `PosixRecorder`, used on Linux and macOS. Both
+provide the `pty`, `termios`, and `select` modules it relies on, and both
+answer the palette queries in the terminals that support them; Terminal.app
+does not, and gets the fallback palette. A future `WindowsRecorder` would
+wrap ConPTY through pywinpty, use threads instead of `select`, enable virtual
+terminal input so keys arrive as the same escape sequences, and use a
+shell-specific sentinel command; key decoding and everything after the
+intermediate file are unchanged.
 
 The recorder opens a pty sized to the current terminal, spawns the user's
 shell in it, puts the real terminal in raw mode, and shuttles bytes both ways
@@ -250,7 +262,8 @@ git/
   pyproject.toml
   src/svg_recorder/
     cli.py          argument parsing, record-then-render flow, render subcommand
-    recorder.py     pty spawn, byte shuttling, pre-command sentinel, palette query
+    recorder.py     Recorder interface and backend selection by platform
+    recorder_posix.py  pty spawn, byte shuttling, pre-command sentinel, palette query
     asciicast.py    read and write the intermediate format
     keys.py         input bytes to key names
     annotations.py  annotation file parsing and mode matching
@@ -263,7 +276,8 @@ git/
   docs/superpowers/specs/
 ```
 
-Dependencies: pyte and wcwidth. Python 3.11 or later. setuptools backend,
+Dependencies: pyte and wcwidth. Python 3.11 or later. Supported platforms are
+Linux and macOS; Windows is a planned follow-on behind the Recorder interface. setuptools backend,
 version as a plain string in the package, console script `svg_recorder`,
 dev extras pytest and pytest-cov. MIT licence. tdb is not a dependency.
 
@@ -276,3 +290,5 @@ dev extras pytest and pytest-cov. MIT licence. tdb is not a dependency.
 - No special per-terminal support; the palette query is the only terminal interaction.
 - Cursor rendering is a flag, off by default.
 - Idle gap compression is not implemented; idle time is free in the patch model.
+- Linux and macOS are supported in the first implementation. Windows is a
+  later sub-project; the recorder interface exists so it stays contained.

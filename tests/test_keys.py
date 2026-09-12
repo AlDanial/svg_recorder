@@ -56,3 +56,11 @@ def test_timestamps_are_preserved():
 def test_unknown_bytes_show_as_hex():
     assert names((0, b"\x1b[?99z")) == ["<0x1b>", "[", "?", "9", "9", "z"]
     assert names((0, b"\xff")) == ["<0xff>"]
+
+
+def test_kitty_csi_u_valid():
+    assert names((0, b"\x1b[97;5u")) == ["<Ctrl>-a"]
+
+
+def test_kitty_csi_u_out_of_range():
+    assert names((0, b"\x1b[9999999u")) == ["<0x1b>", "[", "9", "9", "9", "9", "9", "9", "9", "u"]

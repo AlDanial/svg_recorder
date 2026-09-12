@@ -73,7 +73,11 @@ def _parse_one(buf: bytes) -> tuple[str | None, int]:
             parts = params.split(";")
             mods = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
             if final == "u" and parts[0].isdigit():  # kitty CSI u
-                base = chr(int(parts[0]))
+                code = int(parts[0])
+                # Check for valid Unicode code point and exclude surrogate range
+                if not (0 <= code <= 0x10FFFF and not (0xD800 <= code <= 0xDFFF)):
+                    return "<0x1b>", 1
+                base = chr(code)
                 base = "<Space>" if base == " " else base
                 return _modified(base, mods), i + 1
             if final == "~":

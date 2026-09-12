@@ -33,12 +33,17 @@ def render_events(header: Header, events: list[Event], opts: RenderOptions) -> s
     writer = SvgWriter(header.palette, header.width, total_rows, header.cell,
                        loop=opts.loop, hold=opts.hold, dedup=opts.dedup)
     prev = blank_frame(header.width, total_rows)
+    last_frame_time = 0.0
     for t, frame in sampler.frames():
         patches = diff_frames(prev, frame, opts.gap, opts.full_threshold)
         if patches:
             writer.add_frame(t, patches)
+            last_frame_time = t
         prev = frame
-    return writer.to_string(sampler.end_time + opts.hold if opts.loop else None)
+    # The loop must outlast the last drawn frame, which may be the footer's
+    # bold revert after the last recorded event.
+    duration = max(sampler.end_time, last_frame_time) + opts.hold
+    return writer.to_string(duration if opts.loop else None)
 
 
 def render_cast(path: str | Path, opts: RenderOptions) -> str:

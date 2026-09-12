@@ -31,6 +31,12 @@ class Footer:
         self._keys = (self._keys + [name])[-FOOTER_KEYS:]
         self._last_t = t
 
+    def pending_until(self) -> float | None:
+        """When the newest key stops being bold, or None if nothing is bold."""
+        if not self._keys or self._last_t is None:
+            return None
+        return self._last_t + BOLD_SECONDS
+
     def _line(self, text: str, bold_from: int = -1) -> list[Cell]:
         cells = []
         for i, ch in enumerate(text[:self.width].ljust(self.width)):
@@ -82,6 +88,7 @@ class Sampler:
         prev_cursor_row: int | None = None
         idx = 0
         tick_no = 0
+        drained = False
         end = self.end_time
         while True:
             t = round(tick_no * self.time_delta, 6)
@@ -93,6 +100,12 @@ class Sampler:
                     for kt, name in decoder.feed(et, data):
                         self.footer.push_key(kt, name)
                 idx += 1
+            if not drained and idx >= len(self.events):
+                # No more input is coming: a trailing bare ESC is a key too.
+                drained = True
+                if self.footer:
+                    for kt, name in decoder.finish():
+                        self.footer.push_key(kt, name)
             dirty = set(screen.dirty)
             screen.dirty.clear()
             cur_cursor_row = screen.cursor.y if self.cursor and not screen.cursor.hidden else None
@@ -117,6 +130,11 @@ class Sampler:
                     if new_row != rows[h + i]:
                         rows[h + i] = new_row
             yield t, list(rows)
-            if t >= end:
+            stop = end
+            if self.footer:
+                pending = self.footer.pending_until()
+                if pending is not None:
+                    stop = max(stop, pending)
+            if t >= stop:
                 break
             tick_no += 1

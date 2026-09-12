@@ -107,3 +107,31 @@ def test_sampler_footer_rows_appended_and_keys_fed():
     frames = list(sampler(events, h=1, footer=f).frames())
     assert len(frames[0][1]) == 2
     assert text(frames[-1][1][1]).rstrip() == "<UpArrow>"
+
+
+def test_footer_pending_until_tracks_bold_deadline():
+    f = Footer(20, COLORS)
+    assert f.pending_until() is None
+    f.push_key(1.0, "x")
+    assert f.pending_until() == 3.0
+
+
+def test_sampler_keeps_ticking_until_footer_bold_reverts():
+    f = Footer(10, COLORS)
+    events = [(0.0, "o", b"x"), (0.5, "i", b"q")]
+    frames = list(sampler(events, h=1, footer=f).frames())
+    t, frame = frames[-1]
+    assert t >= 2.5
+    row = frame[1]
+    assert text(row).rstrip() == "q"
+    assert row[0].bold is False
+    # the key is still bold while the hold has not elapsed
+    bold_at = [ft for ft, fr in frames if fr[1][0].bold]
+    assert bold_at and max(bold_at) < 2.5
+
+
+def test_sampler_flushes_trailing_escape_through_decoder_finish():
+    f = Footer(10, COLORS)
+    events = [(0.0, "o", b"x"), (0.3, "i", b"\x1b")]
+    frames = list(sampler(events, h=1, footer=f).frames())
+    assert text(frames[-1][1][1]).rstrip() == "<Esc>"

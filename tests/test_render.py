@@ -37,3 +37,13 @@ def test_render_cast(tmp_path):
         w.write(0.0, "o", b"abc")
     svg = render_cast(p, RenderOptions(loop=False))
     assert ">abc</text>" in svg and "infinite" not in svg
+
+
+def test_render_duration_covers_footer_bold_revert():
+    import re
+    events = [(0.0, "o", b"x"), (0.5, "i", b"q")]
+    svg = render_events(HEADER, events, RenderOptions(footer=True, hold=2.0))
+    duration = float(re.search(r"animation:a\d+ ([\d.]+)s", svg).group(1))
+    pcts = [float(p) for p in re.findall(r"0%\{visibility:hidden\}([\d.]+)%", svg)]
+    assert pcts, svg
+    assert max(pcts) / 100.0 * duration >= 2.5

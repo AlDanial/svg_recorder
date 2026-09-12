@@ -108,9 +108,9 @@ def main(argv: list[str] | None = None) -> int:
         output = Path(args.output or Path(args.cast).with_suffix(".svg").name)
         try:
             svg = render_cast(args.cast, opts)
+            _write_output(svg, output, args.gzip)
         except OSError as e:
             return _fail(str(e))
-        _write_output(svg, output, args.gzip)
         print(f"wrote {output}", file=sys.stderr)
         return 0
 
@@ -139,8 +139,11 @@ def main(argv: list[str] | None = None) -> int:
             get_recorder().record(args.command, pre_commands, cast_path)
         except RecordError as e:
             return _fail(str(e))
-        svg = render_cast(cast_path, opts)
-        _write_output(svg, output, args.gzip)
+        try:
+            svg = render_cast(cast_path, opts)
+            _write_output(svg, output, args.gzip)
+        except OSError as e:
+            return _fail(str(e))
     finally:
         if tmp is not None:
             cast_path.unlink(missing_ok=True)

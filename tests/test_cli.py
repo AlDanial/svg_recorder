@@ -1,4 +1,5 @@
 import gzip
+import tempfile
 from datetime import datetime
 
 from svg_recorder import cli
@@ -98,3 +99,38 @@ def test_record_flow_discards_cast_by_default(tmp_path, monkeypatch):
     out = tmp_path / "s.svg"
     assert cli.main(["-o", str(out)]) == 0
     assert out.exists() and not (tmp_path / "s.cast").exists()
+
+
+def test_render_output_dir_missing_fails(tmp_path, capsys):
+    cast = make_cast(tmp_path / "a.cast")
+    out = tmp_path / "nodir" / "a.svg"
+    rc = cli.main(["render", str(cast), "-o", str(out)])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert err.startswith("svg_recorder:")
+    assert not out.exists()
+
+
+def test_record_flow_output_dir_missing_cleans_up_temp_cast(tmp_path, monkeypatch, capsys):
+    class FakeRecorder:
+        def record(self, command, pre_commands, cast_path):
+            make_cast(cast_path)
+            return Header(10, 2, 0, KITTY_DEFAULT)
+
+    monkeypatch.setattr(cli, "get_recorder", lambda: FakeRecorder())
+
+    real_ntf = tempfile.NamedTemporaryFile
+
+    def fake_ntf(*args, **kwargs):
+        kwargs["dir"] = str(tmp_path)
+        return real_ntf(*args, **kwargs)
+
+    monkeypatch.setattr(cli.tempfile, "NamedTemporaryFile", fake_ntf)
+
+    out = tmp_path / "nodir" / "s.svg"
+    rc = cli.main(["-o", str(out)])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert err.startswith("svg_recorder:")
+    assert not out.exists()
+    assert list(tmp_path.glob("*.cast")) == []

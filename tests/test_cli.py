@@ -169,3 +169,24 @@ def test_footer_colors_accept_any_css_color(tmp_path):
     style = out.read_text().split("<style>")[1].split("</style>")[0]
     assert "fill:#333}" in style
     assert "fill:navy}" in style
+
+
+def test_render_of_non_cast_file_fails_cleanly(tmp_path, capsys):
+    bad = tmp_path / "a.cast"
+    bad.write_text("<svg>\n")
+    rc = cli.main(["render", str(bad), "-o", str(tmp_path / "a.svg")])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert err.startswith("svg_recorder:") and "line 1" in err
+
+
+def test_record_flow_bad_cast_fails_cleanly(tmp_path, monkeypatch, capsys):
+    class FakeRecorder:
+        def record(self, command, pre_commands, cast_path):
+            cast_path.write_text("<svg>\n")
+            return Header(10, 2, 0, KITTY_DEFAULT)
+
+    monkeypatch.setattr(cli, "get_recorder", lambda: FakeRecorder())
+    rc = cli.main(["-o", str(tmp_path / "s.svg"), "--keep-recording"])
+    assert rc == 2
+    assert capsys.readouterr().err.startswith("svg_recorder:")

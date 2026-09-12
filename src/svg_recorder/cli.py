@@ -11,6 +11,7 @@ from pathlib import Path
 
 from . import __version__
 from .annotations import AnnotationError, load_annotations
+from .asciicast import CastError
 from .recorder import RecordError, get_recorder
 from .render import RenderOptions, render_cast
 
@@ -118,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             svg = render_cast(args.cast, opts)
             _write_output(svg, output, args.gzip)
-        except OSError as e:
+        except (CastError, OSError) as e:
             return _fail(str(e))
         print(f"wrote {output}", file=sys.stderr)
         return 0
@@ -151,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             svg = render_cast(cast_path, opts)
             _write_output(svg, output, args.gzip)
-        except OSError as e:
+        except (CastError, OSError) as e:
             return _fail(str(e))
     finally:
         if tmp is not None:

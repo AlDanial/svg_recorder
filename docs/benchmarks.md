@@ -2,7 +2,7 @@
 
 ## Measurement date
 
-2026-09-11 at commit `48801aa`.
+2026-09-11 at commit `7a7e53d`.
 
 ## Recording
 
@@ -40,22 +40,22 @@ Full harness table from `uv run python tools/sizes.py tests/benchmark.cast`:
 
 ```
 variant           benchmark.cast
-default                  176,040
-gap0                     206,460
-gap4                     177,690
-full-never               176,040
-full-0.25                195,406
-no-dedup                 255,514
+default                  175,932
+gap0                     206,352
+gap4                     177,582
+full-never               175,932
+full-0.25                195,298
+no-dedup                 255,406
 no-loop                  171,348
-delta-0.1                170,650
-footer                   176,797
-default+gzip              15,824
+delta-0.1                170,572
+footer                   176,689
+default+gzip              15,816
 ```
 
 ## Ratios
 
-- Default is **11.5 times smaller** than termtosvg raw (2,022,472 / 176,040 ≈ 11.5×)
-- Default is **8.8 times smaller** gzipped (138,572 / 15,824 ≈ 8.8×)
+- Default is **11.5 times smaller** than termtosvg raw (2,022,472 / 175,932 ≈ 11.5×)
+- Default is **8.8 times smaller** gzipped (138,572 / 15,816 ≈ 8.8×)
 
 ## Observations
 

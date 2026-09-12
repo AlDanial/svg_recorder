@@ -249,11 +249,23 @@ recording of the tdb test case is checked in as a fixed benchmark. A
 termtosvg render of the same recording, produced in an isolated tool
 environment, is the baseline to beat.
 
-Benchmark command, run in kitty from `git/tests`:
+Producing the benchmark recording, in a kitty window:
 
 ```
-svg_recorder "tdb --replay-quiet --replay-interval 0.5 --replay-tui session.txt"
+svg_recorder --keep-recording -o benchmark.svg
 ```
+
+This opens a shell in a new pty and starts recording. In that shell, enter:
+
+```
+cd git/tests
+tdb --replay-quiet --replay-interval 0.5 --replay-tui session.txt
+exit
+```
+
+The replay ends with a quit action, so tdb returns to the shell on its own,
+and `exit` ends the recording. The `.cast` file kept alongside the SVG is
+what the harness and the termtosvg baseline consume.
 
 ## 7. Repository layout and packaging
 

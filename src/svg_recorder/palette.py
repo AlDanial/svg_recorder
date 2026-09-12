@@ -12,8 +12,14 @@ ANSI_NAMES = [
 ]
 _INDEX = {name: i for i, name in enumerate(ANSI_NAMES)}
 _INDEX["brown"] = 3  # pyte's name for SGR 33
+_INDEX["brightbrown"] = 11  # pyte's name for SGR 93
+_INDEX["bfightmagenta"] = 13  # pyte's (misspelled) name for SGR 95
 
 _HEX6 = re.compile(r"[0-9a-fA-F]{6}")
+# A CSS color that is not a bare 6-digit hex: a function such as rgb(1,2,3) or
+# a keyword such as navy. Anything matching is passed through untouched.
+_CSS_FUNCTION = re.compile(r"[A-Za-z-]+\([^()]*\)")
+_CSS_KEYWORD = re.compile(r"[A-Za-z]+")
 _OSC_REPLY = re.compile(
     rb"\x1b\](10|11|4;(\d+));rgb:([0-9a-fA-F]+)/([0-9a-fA-F]+)/([0-9a-fA-F]+)(?:\x1b\\|\x07)"
 )
@@ -26,15 +32,23 @@ class Palette:
     colors: tuple[str, ...]
 
     def resolve(self, color: str, default: str) -> str:
-        """Map a pyte color value to '#rrggbb'."""
+        """Map a pyte color value to a CSS color.
+
+        pyte names and bare 6-digit hex become '#rrggbb' from this palette.
+        Anything else that is already a CSS color -- '#333', 'navy',
+        'rgb(1,2,3)' -- is passed through verbatim, so --footer-colors accepts
+        any CSS color value.
+        """
         if color == "default":
             return default
         if color in _INDEX:
             return self.colors[_INDEX[color]]
-        if color.startswith("#") and _HEX6.fullmatch(color[1:]):
+        if color.startswith("#"):
             return color.lower()
         if _HEX6.fullmatch(color):
             return "#" + color.lower()
+        if _CSS_FUNCTION.fullmatch(color) or _CSS_KEYWORD.fullmatch(color):
+            return color
         return default
 
     def to_theme(self) -> dict:

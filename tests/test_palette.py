@@ -17,7 +17,28 @@ def test_resolve_named_hex_and_default():
     assert p.resolve("brightred", "#000000") == "#f2201f"
     assert p.resolve("FF8700", "#000000") == "#ff8700"
     assert p.resolve("#abcdef", "#000000") == "#abcdef"
-    assert p.resolve("nonsense", "#000000") == "#000000"
+    assert p.resolve("", "#000000") == "#000000"
+    assert p.resolve("12", "#000000") == "#000000"
+
+
+def test_resolve_maps_every_pyte_colour_name():
+    # pyte emits aixterm names for SGR 90-97, including two misspelled ones;
+    # none of them may leak through as a bare CSS keyword.
+    import pyte.graphics as g
+    names = set(g.FG.values()) | set(g.BG.values()) | set(g.FG_AIXTERM.values()) | set(g.BG_AIXTERM.values())
+    for name in names - {"default"}:
+        assert KITTY_DEFAULT.resolve(name, "#123456") in KITTY_DEFAULT.colors, name
+
+
+def test_resolve_passes_css_colours_through():
+    p = KITTY_DEFAULT
+    assert p.resolve("#333", "#000000") == "#333"
+    assert p.resolve("#ABC", "#000000") == "#abc"
+    assert p.resolve("navy", "#000000") == "navy"
+    assert p.resolve("rgb(1,2,3)", "#000000") == "rgb(1,2,3)"
+    assert p.resolve("rgb(1, 2, 3)", "#000000") == "rgb(1, 2, 3)"
+    assert p.resolve("hsl(10deg 20% 30% / 40%)", "#000000") == "hsl(10deg 20% 30% / 40%)"
+    assert p.resolve("rebeccapurple", "#000000") == "rebeccapurple"
 
 
 def test_theme_round_trip():

@@ -134,3 +134,13 @@ def test_record_flow_output_dir_missing_cleans_up_temp_cast(tmp_path, monkeypatc
     assert err.startswith("svg_recorder:")
     assert not out.exists()
     assert list(tmp_path.glob("*.cast")) == []
+
+
+def test_footer_colors_accept_any_css_color(tmp_path):
+    cast = make_cast(tmp_path / "a.cast", width=20)
+    out = tmp_path / "a.svg"
+    rc = cli.main(["render", str(cast), "-o", str(out), "-f", "--footer-colors", "#333", "navy"])
+    assert rc == 0
+    style = out.read_text().split("<style>")[1].split("</style>")[0]
+    assert "fill:#333}" in style
+    assert "fill:navy}" in style

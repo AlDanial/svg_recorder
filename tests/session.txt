@@ -1,0 +1,23 @@
+{"tdb_recording": 1, "created": "2026-09-11T16:20:08", "language": "python", "adapter": null, "step_mode": "line", "no_just_my_code": false, "mode": "launch", "program": "/home/al/projects/svg_recorder/git/tests/digits_of_pi.py", "args": [], "cwd": "/home/al/projects/svg_recorder/git/tests", "python": null}
+{"t": 9.407, "action": "set_breakpoint", "params": ["/home/al/projects/svg_recorder/git/tests/digits_of_pi.py:23"]}
+{"t": 12.735, "action": "continue", "params": []}
+{"t": 17.535, "action": "evaluate", "params": ["n"]}
+{"t": 22.758, "action": "continue", "params": []}
+{"t": 23.438, "action": "continue", "params": []}
+{"t": 28.444, "action": "stack_up", "params": []}
+{"t": 35.309, "action": "evaluate", "params": ["char"]}
+{"t": 39.893, "action": "stack_up", "params": []}
+{"t": 42.371, "action": "stack_down", "params": []}
+{"t": 43.732, "action": "stack_down", "params": []}
+{"t": 44.846, "action": "continue", "params": []}
+{"t": 49.727, "action": "evaluate", "params": ["n + nr"]}
+{"t": 67.405, "action": "set_breakpoint", "params": ["/home/al/projects/svg_recorder/git/tests/digits_of_pi.py:59"]}
+{"t": 68.637, "action": "continue", "params": []}
+{"t": 80.457, "action": "evaluate", "params": ["char"]}
+{"t": 86.37, "action": "remove_breakpoint", "params": ["/home/al/projects/svg_recorder/git/tests/digits_of_pi.py:59"]}
+{"t": 87.91, "action": "continue", "params": []}
+{"t": 89.517, "action": "next", "params": []}
+{"t": 90.269, "action": "next", "params": []}
+{"t": 91.03, "action": "next", "params": []}
+{"t": 91.974, "action": "next", "params": []}
+{"t": 94.438, "action": "quit", "params": []}

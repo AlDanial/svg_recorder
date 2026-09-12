@@ -26,7 +26,9 @@ def blank_frame(cols: int, rows: int) -> Frame:
 
 
 def is_blank(cell: Cell) -> bool:
-    return cell.char in (" ", "") and cell.bg == "default" and not cell.reverse
+    """True when the cell leaves no ink, so an erase rect over it is pointless."""
+    return (cell.char in (" ", "") and cell.bg == "default"
+            and not cell.reverse and not cell.underline)
 
 
 @dataclass(frozen=True)

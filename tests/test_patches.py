@@ -17,6 +17,7 @@ def test_blank_frame_and_is_blank():
     assert not is_blank(cell("x"))
     assert not is_blank(cell(" ", bg="red"))
     assert not is_blank(cell(" ", reverse=True))
+    assert not is_blank(cell(" ", underline=True))
 
 
 def test_row_runs_merges_small_gaps():

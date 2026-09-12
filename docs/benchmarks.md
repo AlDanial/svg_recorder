@@ -6,7 +6,23 @@
 
 ## Recording
 
-The benchmark recording, `tests/benchmark.cast`, was recorded headlessly on 2026-09-11 through a pty pair at 120 columns by 36 rows with `TERM=xterm-256color` and the default kitty palette. It contains the tdb session `tdb --replay-quiet --replay-interval 0.5 --replay-tui session.txt` run from `tests/`, with 545 events over about 16 seconds. The recording was not made in a kitty window; a kitty recording can replace it by following the recording steps in the brief's Step 3 and re-running the harness.
+The benchmark recording, `tests/benchmark.cast`, was recorded headlessly on 2026-09-11 through a pty pair at 120 columns by 36 rows with `TERM=xterm-256color` and the default kitty palette. It contains the tdb session `tdb --replay-quiet --replay-interval 0.5 --replay-tui session.txt` run from `tests/`, with 545 events over about 16 seconds. The recording was not made in a kitty window.
+
+To replace it with a recording made in a kitty window, run from the repository root:
+
+```bash
+uv run svg_recorder --keep-recording -o tests/benchmark.svg
+```
+
+then in the new shell:
+
+```bash
+cd tests
+tdb --replay-quiet --replay-interval 0.5 --replay-tui session.txt
+exit
+```
+
+Delete `tests/benchmark.svg`, keep `tests/benchmark.cast`, and re-run `uv run python tools/sizes.py tests/benchmark.cast`.
 
 ## Baseline
 

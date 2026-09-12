@@ -77,7 +77,7 @@ def diff_frames(old: Frame, new: Frame, gap: int = 2, full_threshold: float = 0.
         runs = row_runs(old[r], new[r], gap)
         if runs:
             runs_by_row[r] = runs
-            changed += sum(e - s for s, e in runs)
+            changed += sum(1 for i, (a, b) in enumerate(zip(old[r], new[r])) if a != b)
     if not runs_by_row:
         return []
     if cols * height and changed / (cols * height) > full_threshold:

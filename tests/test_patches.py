@@ -81,3 +81,18 @@ def test_identical_row_objects_are_skipped():
     new = [old[0], [cell("d"), cell("E"), cell("f")]]
     [p] = diff_frames(old, new)
     assert (p.col, p.row) == (1, 1)
+
+
+def test_full_threshold_counts_actual_changed_cells_not_merged_spans():
+    # 1x10 row, cells 0 and 3 differ, gap=2 merges them into span 0-4
+    # Actual changed: 2/10 = 0.2; Span-based would be 4/10 = 0.4
+    old = frame_from(["abcdefghij"])[0:1]  # 1 row
+    new = frame_from(["XbcXefghij"])[0:1]  # cells 0 and 3 changed
+
+    # With full_threshold=0.3: 0.2 < 0.3, should NOT trigger full-screen
+    [p] = diff_frames(old, new, gap=2, full_threshold=0.3)
+    assert (p.col, p.row, p.width, p.height) == (0, 0, 4, 1)
+
+    # With full_threshold=0.15: 0.2 > 0.15, should trigger full-screen
+    [p] = diff_frames(old, new, gap=2, full_threshold=0.15)
+    assert (p.col, p.row, p.width, p.height) == (0, 0, 10, 1)

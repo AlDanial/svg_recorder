@@ -95,22 +95,22 @@ class Sampler:
                 idx += 1
             dirty = set(screen.dirty)
             screen.dirty.clear()
-            if self.cursor:
-                if prev_cursor_row is not None:
-                    dirty.add(prev_cursor_row)
-                if not screen.cursor.hidden:
-                    dirty.add(screen.cursor.y)
+            cur_cursor_row = screen.cursor.y if self.cursor and not screen.cursor.hidden else None
+            special_rows = {r for r in (prev_cursor_row, cur_cursor_row) if r is not None}
             for r in dirty:
-                if 0 <= r < h:
+                if 0 <= r < h and r not in special_rows:
                     rows[r] = self._convert_row(screen, r)
-            prev_cursor_row = None
-            if self.cursor and not screen.cursor.hidden:
-                cy, cx = screen.cursor.y, screen.cursor.x
-                if cy < h and cx < w:
-                    row = list(rows[cy])
-                    row[cx] = row[cx]._replace(reverse=not row[cx].reverse)
-                    rows[cy] = row
-                    prev_cursor_row = cy
+            for r in special_rows:
+                if not (0 <= r < h):
+                    continue
+                candidate = self._convert_row(screen, r)
+                if r == cur_cursor_row:
+                    cx = screen.cursor.x
+                    if cx < w:
+                        candidate[cx] = candidate[cx]._replace(reverse=not candidate[cx].reverse)
+                if candidate != rows[r]:
+                    rows[r] = candidate
+            prev_cursor_row = cur_cursor_row
             if self.footer:
                 texts = ["".join(c.char for c in rows[r]) for r in range(h)]
                 for i, new_row in enumerate(self.footer.rows(t, texts)):

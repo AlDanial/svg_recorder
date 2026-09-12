@@ -81,6 +81,20 @@ def test_sampler_cursor_marks_cell_reverse():
     assert frames[-1][1][0][2].reverse is False
 
 
+def test_sampler_cursor_row_keeps_identity_when_static():
+    events = [(0.0, "o", b"ab"), (0.3, "o", b"")]
+    frames = list(sampler(events, cursor=True).frames())
+    assert frames[1][1][0] is frames[0][1][0]
+    assert frames[-1][1][0] is frames[0][1][0]
+
+    events = [(0.0, "o", b"ab"), (0.3, "o", b"c")]
+    frames = list(sampler(events, cursor=True).frames())
+    row0, row_last = frames[0][1][0], frames[-1][1][0]
+    assert row_last is not row0
+    assert row_last[2].char == "c" and row_last[2].reverse is False
+    assert row_last[3].reverse is True
+
+
 def test_sampler_wide_char_continuation_cell_is_empty():
     frames = list(sampler([(0.0, "o", "你a".encode())]).frames())
     row = frames[-1][1][0]

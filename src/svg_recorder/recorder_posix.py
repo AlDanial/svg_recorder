@@ -103,6 +103,16 @@ class PosixRecorder:
     # ----- main -----------------------------------------------------------
 
     def record(self, command: str | None, pre_commands: list[str], cast_path: Path) -> Header:
+        if self.term_in < 0:
+            raise RecordError("no terminal on stdin")
+        try:
+            return self._record(command, pre_commands, cast_path)
+        except RecordError:
+            raise
+        except (OSError, ValueError) as e:  # pty, termios and select failures
+            raise RecordError(f"recording failed: {e}") from e
+
+    def _record(self, command: str | None, pre_commands: list[str], cast_path: Path) -> Header:
         cols, lines = self._size()
         saved = None
         if os.isatty(self.term_in):
@@ -118,8 +128,8 @@ class PosixRecorder:
                     os.execvp(self.shell, [self.shell, "-c", script])
                 finally:
                     os._exit(127)
-            fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", lines, cols, 0, 0))
             try:
+                fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", lines, cols, 0, 0))
                 rest = self._wait_for_sentinel(master, token.encode())
                 header = Header(cols, lines, int(time.time()), palette)
                 with Writer(cast_path, header) as writer:

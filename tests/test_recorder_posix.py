@@ -153,3 +153,19 @@ def test_split_utf8_tail_holds_back_only_incomplete_sequences():
     assert split_utf8_tail(b"a\x80\x80") == (b"a\x80\x80", b"")
     # a lone continuation run longer than any sequence is not held back
     assert split_utf8_tail(b"\xbd\xa0") == (b"\xbd\xa0", b"")
+
+
+def test_record_without_a_terminal_raises_record_error(tmp_path):
+    rec = PosixRecorder(term_in=-1, term_out=-1, shell="/bin/sh")
+    with pytest.raises(RecordError, match="no terminal"):
+        rec.record("true", [], tmp_path / "r.cast")
+
+
+def test_os_errors_from_the_pty_become_record_errors(tmp_path, monkeypatch):
+    term = FakeTerminal()
+    monkeypatch.setattr("svg_recorder.recorder_posix.pty.fork",
+                        lambda: (_ for _ in ()).throw(OSError("out of ptys")))
+    rec = PosixRecorder(term_in=term.slave, term_out=term.slave, shell="/bin/sh", query_timeout=0.0)
+    with pytest.raises(RecordError, match="out of ptys"):
+        rec.record("true", [], tmp_path / "r.cast")
+    term.close()

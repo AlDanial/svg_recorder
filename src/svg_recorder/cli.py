@@ -15,9 +15,18 @@ from .recorder import RecordError, get_recorder
 from .render import RenderOptions, render_cast
 
 
-def default_output_name(now: datetime | None = None) -> str:
+def default_output_name(now: datetime | None = None, gzip: bool = False) -> str:
     now = now or datetime.now()
-    return now.strftime("recording-%Y-%m-%d-%H-%M-%S.svg")
+    suffix = ".svgz" if gzip else ".svg"
+    return now.strftime("recording-%Y-%m-%d-%H-%M-%S") + suffix
+
+
+def _output_path(name: str | None, default: str, compress: bool) -> Path:
+    """The output path, with a '.svg' suffix turned into '.svgz' under --gzip."""
+    path = Path(name or default)
+    if compress and path.suffix == ".svg":
+        path = path.with_suffix(".svgz")
+    return path
 
 
 def _add_render_options(p: argparse.ArgumentParser) -> None:
@@ -31,7 +40,7 @@ def _add_render_options(p: argparse.ArgumentParser) -> None:
     p.add_argument("-o", "--output", metavar="FILE", help="SVG output file")
     p.add_argument("--cursor", action="store_true", help="render the cursor")
     p.add_argument("--no-loop", action="store_true", help="play once instead of looping")
-    p.add_argument("--gzip", action="store_true", help="write gzip compressed output")
+    p.add_argument("--gzip", action="store_true", help="write gzip compressed output to a .svgz file")
     p.add_argument("--gap", type=int, default=2, help=argparse.SUPPRESS)
     p.add_argument("--full-threshold", type=float, default=0.5, help=argparse.SUPPRESS)
     p.add_argument("--no-dedup", action="store_true", help=argparse.SUPPRESS)
@@ -105,7 +114,7 @@ def main(argv: list[str] | None = None) -> int:
             opts = options_from_args(args)
         except (AnnotationError, OSError) as e:
             return _fail(f"annotation file: {e}")
-        output = Path(args.output or Path(args.cast).with_suffix(".svg").name)
+        output = _output_path(args.output, Path(args.cast).with_suffix(".svg").name, args.gzip)
         try:
             svg = render_cast(args.cast, opts)
             _write_output(svg, output, args.gzip)
@@ -126,7 +135,7 @@ def main(argv: list[str] | None = None) -> int:
     except OSError as e:
         return _fail(f"pre-commands file: {e}")
 
-    output = Path(args.output or default_output_name())
+    output = _output_path(args.output, default_output_name(gzip=args.gzip), args.gzip)
     if args.keep_recording:
         cast_path = output.with_suffix(".cast")
         tmp = None

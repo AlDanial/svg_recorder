@@ -49,6 +49,31 @@ def test_gzip_output(tmp_path):
     assert b"<svg" in gzip.decompress(out.read_bytes())
 
 
+def test_gzip_rewrites_svg_suffix_to_svgz(tmp_path, capsys):
+    cast = make_cast(tmp_path / "a.cast")
+    assert cli.main(["render", str(cast), "-o", str(tmp_path / "a.svg"), "--gzip"]) == 0
+    assert not (tmp_path / "a.svg").exists()
+    assert b"<svg" in gzip.decompress((tmp_path / "a.svgz").read_bytes())
+    assert "a.svgz" in capsys.readouterr().err
+
+
+def test_default_output_name_gzip():
+    assert cli.default_output_name(datetime(2026, 9, 11, 8, 5, 9), gzip=True) == \
+        "recording-2026-09-11-08-05-09.svgz"
+
+
+def test_record_flow_gzip_uses_svgz(tmp_path, monkeypatch):
+    class FakeRecorder:
+        def record(self, command, pre_commands, cast_path):
+            make_cast(cast_path)
+            return Header(10, 2, 0, KITTY_DEFAULT)
+
+    monkeypatch.setattr(cli, "get_recorder", lambda: FakeRecorder())
+    assert cli.main(["-o", str(tmp_path / "s.svg"), "--gzip", "--keep-recording"]) == 0
+    assert (tmp_path / "s.svgz").exists() and not (tmp_path / "s.svg").exists()
+    assert (tmp_path / "s.cast").exists()
+
+
 def test_bad_annotation_file_fails_before_recording(tmp_path, capsys):
     ann = tmp_path / "ann.txt"
     ann.write_text("mode\n")

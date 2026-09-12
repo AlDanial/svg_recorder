@@ -1,8 +1,8 @@
 import fcntl
 import os
+import signal
 import struct
 import termios
-import threading
 import tty
 
 import pytest
@@ -13,21 +13,27 @@ from svg_recorder.recorder_posix import PosixRecorder, build_script
 
 
 class FakeTerminal:
-    """A pty pair standing in for the user's real terminal."""
+    """A pty pair standing in for the user's real terminal.
+
+    Deliberately thread-free: pty.fork() in a multi-threaded process warns and
+    can deadlock the child. Output the recorder writes to the slave sits in the
+    pty buffer (several kilobytes, far more than these tests produce) and is
+    collected by drain() when the recording is over.
+    """
 
     def __init__(self, cols=40, lines=10):
         self.master, self.slave = os.openpty()
         fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack("HHHH", lines, cols, 0, 0))
         tty.setraw(self.slave)
+        os.set_blocking(self.master, False)
         self.seen = b""
-        self._thread = threading.Thread(target=self._drain, daemon=True)
-        self._thread.start()
 
-    def _drain(self):
+    def drain(self):
+        """Collect everything the recorder has echoed to the terminal so far."""
         while True:
             try:
-                data = os.read(self.master, 4096)
-            except OSError:
+                data = os.read(self.master, 65536)
+            except (BlockingIOError, OSError):
                 break
             if not data:
                 break
@@ -36,7 +42,18 @@ class FakeTerminal:
     def type(self, data: bytes):
         os.write(self.master, data)
 
+    def type_after(self, delay: float, data: bytes):
+        """Type after a delay without a thread, so pty.fork() stays single-threaded.
+
+        fork() clears interval timers in the child, so only the recorder's own
+        process ever sees the alarm.
+        """
+        signal.signal(signal.SIGALRM, lambda *_: self.type(data))
+        signal.setitimer(signal.ITIMER_REAL, delay)
+
     def close(self):
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        self.drain()
         os.close(self.slave)
         os.close(self.master)
 
@@ -81,7 +98,7 @@ def test_pre_commands_affect_environment_and_are_not_recorded(tmp_path):
 def test_input_is_forwarded_and_recorded(tmp_path):
     term = FakeTerminal()
     path = tmp_path / "r.cast"
-    threading.Timer(0.3, term.type, args=(b"q\n",)).start()
+    term.type_after(0.3, b"q\n")
     record(term, "read x; printf 'got:%s' \"$x\"", path=path)
     term.close()
     _, events = read(path)

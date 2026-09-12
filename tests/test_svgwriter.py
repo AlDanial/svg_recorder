@@ -51,12 +51,48 @@ def test_multi_row_patch_uses_tspans():
 
 
 def test_middle_blank_row_does_not_shift_later_rows():
-    # A middle row made only of continuation cells (char == "") must not break
-    # dy-based advancement for the rows below it; absolute y avoids the issue.
+    # A middle row made only of continuation cells (char == "") emits no tspan
+    # at all; absolute y on every later row keeps them in place.
     w = SvgWriter(KITTY_DEFAULT, 10, 4)
     w.add_frame(0.0, [Patch(0, 0, 1, ((cell("a"),), (cell(""),), (cell("b"),)), False)])
     svg = w.to_string()
     assert '<tspan x="0" y="47" textLength="8">b</tspan>' in svg
+    assert svg.count("<tspan") == 2          # the empty middle row is skipped
+    assert "></tspan>" not in svg
+
+
+def test_row_starting_with_continuation_cell_shifts_x():
+    # The leading continuation cell carries no text, so its width folds into
+    # the x of the run that does: an empty <tspan> would be ignored by browsers.
+    w = SvgWriter(KITTY_DEFAULT, 10, 2)
+    w.add_frame(0.0, [Patch(0, 0, 3, ((cell(""), cell("a", fg="red"), cell("b", fg="red")),), False)])
+    svg = w.to_string()
+    assert "></tspan>" not in svg
+    assert re.search(r'<text x="8" y="13"><tspan textLength="16" class="f\d+">ab</tspan></text>', svg)
+
+    # ... and the same for a later row, which carries its own x.
+    w = SvgWriter(KITTY_DEFAULT, 10, 3)
+    w.add_frame(0.0, [Patch(1, 0, 2,
+                            ((cell("a"), cell("b")),
+                             (cell(""), cell("c", fg="red"))), False)])
+    svg = w.to_string()
+    assert "></tspan>" not in svg
+    assert re.search(r'<tspan x="16" y="30" textLength="8" class="f\d+">c</tspan>', svg)
+
+
+def test_fully_empty_row_patch_emits_no_text():
+    w = SvgWriter(KITTY_DEFAULT, 10, 2)
+    w.add_frame(0.0, [Patch(0, 0, 1, ((cell(""),),), True)])
+    svg = w.to_string()
+    assert "<text" not in svg
+    assert 'class="e"' in svg          # the erase rect is still emitted
+
+    # nothing to draw at all: no element, and no timing class for it either
+    w = SvgWriter(KITTY_DEFAULT, 10, 2)
+    w.add_frame(1.0, [Patch(0, 0, 1, ((cell(""),),), False)])
+    svg = w.to_string()
+    assert "<text" not in svg and "<use" not in svg and "<g " not in svg
+    assert "@keyframes" not in svg
 
 
 def test_styles_become_classes_defined_once():

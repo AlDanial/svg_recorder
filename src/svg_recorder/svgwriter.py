@@ -101,62 +101,34 @@ class SvgWriter:
                     out.append(f'<rect x="{ox + i * cw}" y="{oy + ri * ch}" width="{(j - i) * cw}" '
                                f'height="{ch}" class="{self._bg.get(bg)}"/>')
                 i = j
-        # text runs per row: list of (class, text, cell_count) -- cell_count counts
-        # continuation cells (char == "") so textLength always spans the run's cells.
-        row_markup: list[list[tuple[str, str, int]]] = []
-        for row in p.rows:
-            runs: list[list] = []
-            for c in row:
+        # Text: one <text> per run of same-styled cells, pinned to its cells by
+        # x and textLength.  The font's natural advance rarely equals the cell
+        # width, and Firefox ignores textLength on <tspan>, so runs that share a
+        # <text> drift sideways there; a <text> of its own keeps each run put.
+        for ri, row in enumerate(p.rows):
+            y = oy + ri * ch + BASELINE
+            runs: list[list] = []  # [class, text, first_col, cell_count]
+            for ci, c in enumerate(row):
                 fg, _ = self._colors(c)
                 cls = self._text_class(c, fg)
                 if runs and runs[-1][0] == cls:
                     runs[-1][1] += c.char
-                    runs[-1][2] += 1
+                    runs[-1][3] += 1
                 else:
-                    runs.append([cls, c.char, 1])
-            row_markup.append([tuple(run) for run in runs])
-        if len(p.rows) == 1 and len(row_markup[0]) == 1:
-            cls, text, _ncells = row_markup[0][0]
-            if not text:
-                return "".join(out)
-            attr = f' class="{cls}"' if cls else ""
-            out.append(f'<text x="{ox}" y="{oy + BASELINE}" textLength="{width_px}"{attr}>{_esc(text)}</text>')
-            return "".join(out)
-        # A run of wide-character continuation cells carries no text; an empty
-        # tspan would not apply its x, so drop it and shift the next run that
-        # does carry text by the cells it stood for.
-        emitted: list[list[tuple[int | None, str, str, int]]] = []
-        for runs in row_markup:
-            col, shifted, kept = 0, False, []
-            for cls, text, ncells in runs:
-                if text:
-                    kept.append((col if shifted else None, cls, text, ncells))
-                    shifted = False
-                else:
-                    shifted = True
-                col += ncells
-            emitted.append(kept)
-        if not any(emitted):
-            return "".join(out)
-        text_x = ox
-        if emitted[0] and emitted[0][0][0]:
-            xcol, cls, text, ncells = emitted[0][0]
-            text_x = ox + xcol * cw
-            emitted[0][0] = (None, cls, text, ncells)
-        parts = [f'<text x="{text_x}" y="{oy + BASELINE}">']
-        for ri, runs in enumerate(emitted):
-            for k, (xcol, cls, text, ncells) in enumerate(runs):
-                attrs = ""
-                if k == 0 and ri > 0:
-                    attrs += f' x="{ox + (xcol or 0) * cw}" y="{oy + ri * ch + BASELINE}"'
-                elif xcol is not None:
-                    attrs += f' x="{ox + xcol * cw}"'
-                attrs += f' textLength="{ncells * cw}"'
-                if cls:
-                    attrs += f' class="{cls}"'
-                parts.append(f"<tspan{attrs}>{_esc(text)}</tspan>")
-        parts.append("</text>")
-        out.append("".join(parts))
+                    runs.append([cls, c.char, ci, 1])
+            for cls, text, col, ncells in runs:
+                # Blank runs leave no ink (backgrounds are rects) unless they
+                # are underlined; wide-character continuation cells are "".
+                if not text.strip(" ") and not (text and "u" in cls.split()):
+                    continue
+                # A continuation cell (char == "") that opens a run stands for
+                # the right half of a glyph drawn by the previous run.
+                lead = 0
+                while row[col + lead].char == "":
+                    lead += 1
+                attr = f' class="{cls}"' if cls else ""
+                out.append(f'<text x="{ox + (col + lead) * cw}" y="{y}" '
+                           f'textLength="{(ncells - lead) * cw}"{attr}>{_esc(text)}</text>')
         return "".join(out)
 
     # ----- document -------------------------------------------------------

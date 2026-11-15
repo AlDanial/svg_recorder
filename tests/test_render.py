@@ -19,7 +19,7 @@ def test_render_footer_adds_rows_and_keys():
     events = [(0.0, "o", b"x"), (0.5, "i", b"q"), (1.0, "o", b"y")]
     svg = render_events(HEADER, events, RenderOptions(footer=True))
     assert 'height="68"' in svg               # 3 rows + 1 footer row, 17 px each
-    assert ">q</text>" in svg or ">q</tspan>" in svg
+    assert ">q</text>" in svg
     assert "#303030" in svg
 
 

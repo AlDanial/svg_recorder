@@ -32,5 +32,8 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+svg_recorder = ["*.html"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

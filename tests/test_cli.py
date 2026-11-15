@@ -190,3 +190,90 @@ def test_record_flow_bad_cast_fails_cleanly(tmp_path, monkeypatch, capsys):
     rc = cli.main(["-o", str(tmp_path / "s.svg"), "--keep-recording"])
     assert rc == 2
     assert capsys.readouterr().err.startswith("svg_recorder:")
+
+
+def test_html_render_writes_page_next_to_svg(tmp_path, capsys):
+    cast = make_cast(tmp_path / "a.cast")
+    out = tmp_path / "a.svg"
+    assert cli.main(["render", str(cast), "-o", str(out), "--html"]) == 0
+    page = (tmp_path / "a.html").read_text(encoding="utf-8")
+    assert out.read_text() in page and ">hi</text>" in page
+    assert "<title>a</title>" in page
+    err = capsys.readouterr().err
+    assert "a.svg" in err and "a.html" in err
+
+
+def test_html_with_gzip_embeds_plain_svg(tmp_path):
+    cast = make_cast(tmp_path / "a.cast")
+    assert cli.main(["render", str(cast), "-o", str(tmp_path / "a.svg"), "--gzip", "--html"]) == 0
+    assert b"<svg" in gzip.decompress((tmp_path / "a.svgz").read_bytes())
+    assert ">hi</text>" in (tmp_path / "a.html").read_text(encoding="utf-8")
+
+
+def test_html_name_replaces_only_the_last_suffix(tmp_path):
+    cast = make_cast(tmp_path / "a.cast")
+    assert cli.main(["render", str(cast), "-o", str(tmp_path / "out"), "--html"]) == 0
+    assert (tmp_path / "out.html").exists()
+    assert cli.main(["render", str(cast), "-o", str(tmp_path / "a.b.svg"), "--html"]) == 0
+    assert (tmp_path / "a.b.html").exists()
+
+
+def test_html_refuses_html_output_name(tmp_path, capsys):
+    cast = make_cast(tmp_path / "a.cast")
+    out = tmp_path / "a.html"
+    assert cli.main(["render", str(cast), "-o", str(out), "--html"]) == 2
+    assert "--html" in capsys.readouterr().err
+    assert not out.exists()
+
+
+def test_html_refuses_html_output_name_before_recording(tmp_path, monkeypatch, capsys):
+    def no_recorder():
+        raise AssertionError("recording started")
+
+    monkeypatch.setattr(cli, "get_recorder", no_recorder)
+    assert cli.main(["-o", str(tmp_path / "A.HTML"), "--html"]) == 2
+    assert "--html" in capsys.readouterr().err
+
+
+def test_html_record_path(tmp_path, monkeypatch, capsys):
+    class FakeRecorder:
+        def record(self, command, pre_commands, cast_path):
+            make_cast(cast_path)
+            return Header(10, 2, 0, KITTY_DEFAULT)
+
+    monkeypatch.setattr(cli, "get_recorder", lambda: FakeRecorder())
+    assert cli.main(["-o", str(tmp_path / "s.svg"), "--html"]) == 0
+    assert ">hi</text>" in (tmp_path / "s.html").read_text(encoding="utf-8")
+    assert "s.html" in capsys.readouterr().err
+
+
+def test_no_html_by_default(tmp_path):
+    cast = make_cast(tmp_path / "a.cast")
+    assert cli.main(["render", str(cast), "-o", str(tmp_path / "a.svg")]) == 0
+    assert list(tmp_path.glob("*.html")) == []
+
+
+def test_html_write_failure_still_reports_the_svg(tmp_path, capsys):
+    cast = make_cast(tmp_path / "a.cast")
+    (tmp_path / "a.html").mkdir()  # the page cannot be written over a directory
+    assert cli.main(["render", str(cast), "-o", str(tmp_path / "a.svg"), "--html"]) == 2
+    err = capsys.readouterr().err
+    assert (tmp_path / "a.svg").exists()
+    assert f"wrote {tmp_path / 'a.svg'}" in err and "svg_recorder:" in err
+
+
+def test_html_with_nameless_output_fails_cleanly(tmp_path, monkeypatch, capsys):
+    cast = make_cast(tmp_path / "a.cast")
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["render", str(cast), "-o", ".", "--html"]) == 2
+    assert capsys.readouterr().err.startswith("svg_recorder:")
+
+
+def test_cast_with_markup_in_theme_is_refused(tmp_path, capsys):
+    cast = tmp_path / "evil.cast"
+    theme = KITTY_DEFAULT.to_theme() | {"bg": '"/><script>alert(1)</script>'}
+    import json
+    cast.write_text(json.dumps({"version": 2, "width": 10, "height": 2, "theme": theme}) + "\n")
+    assert cli.main(["render", str(cast), "-o", str(tmp_path / "e.svg"), "--html"]) == 2
+    assert "line 1" in capsys.readouterr().err
+    assert not (tmp_path / "e.svg").exists() and not (tmp_path / "e.html").exists()

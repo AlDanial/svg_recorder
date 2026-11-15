@@ -18,7 +18,10 @@ _INDEX["bfightmagenta"] = 13  # pyte's (misspelled) name for SGR 95
 _HEX6 = re.compile(r"[0-9a-fA-F]{6}")
 # A CSS color that is not a bare 6-digit hex: a function such as rgb(1,2,3) or
 # a keyword such as navy. Anything matching is passed through untouched.
-_CSS_FUNCTION = re.compile(r"[A-Za-z-]+\([^()]*\)")
+# The argument list is limited to what a colour function can hold, so that a
+# value can never close the attribute or style rule it is written into.
+_CSS_FUNCTION = re.compile(r"[A-Za-z-]+\([\w\s.,%/+-]*\)")
+_HASH = re.compile(r"#[0-9a-fA-F]{3,8}")
 _CSS_KEYWORD = re.compile(r"[A-Za-z]+")
 _OSC_REPLY = re.compile(
     rb"\x1b\](10|11|4;(\d+));rgb:([0-9a-fA-F]+)/([0-9a-fA-F]+)/([0-9a-fA-F]+)(?:\x1b\\|\x07)"
@@ -43,7 +46,7 @@ class Palette:
             return default
         if color in _INDEX:
             return self.colors[_INDEX[color]]
-        if color.startswith("#"):
+        if _HASH.fullmatch(color):
             return color.lower()
         if _HEX6.fullmatch(color):
             return "#" + color.lower()
@@ -56,7 +59,19 @@ class Palette:
 
     @classmethod
     def from_theme(cls, d: dict) -> "Palette":
-        return cls(d["fg"], d["bg"], tuple(d["palette"].split(":")))
+        """A palette from a .cast header's theme.
+
+        The file may be someone else's and these values are written into the
+        SVG unescaped, so anything that is not a color raises ValueError.
+        """
+        colors = tuple(d["palette"].split(":"))
+        if len(colors) != len(ANSI_NAMES):
+            raise ValueError(f"theme palette needs {len(ANSI_NAMES)} colors, not {len(colors)}")
+        for value in (d["fg"], d["bg"], *colors):
+            if not (isinstance(value, str) and (_HASH.fullmatch(value) or _CSS_FUNCTION.fullmatch(value)
+                                                or _CSS_KEYWORD.fullmatch(value))):
+                raise ValueError(f"theme color {value!r} is not a color")
+        return cls(d["fg"], d["bg"], colors)
 
 
 KITTY_DEFAULT = Palette(

@@ -69,3 +69,22 @@ def test_apply_osc_replies_parses_16bit_and_8bit_and_bel():
 def test_apply_osc_replies_ignores_out_of_range_index():
     p = apply_osc_replies(b"\x1b]4;99;rgb:ff/ff/ff\x1b\\", KITTY_DEFAULT)
     assert p == KITTY_DEFAULT
+
+
+def test_from_theme_rejects_values_that_are_not_colours():
+    # Theme values come from a .cast file, which may be someone else's, and
+    # are written into the SVG (and the --html page) unescaped.
+    import pytest
+    evil = '"/><script>alert(1)</script>'
+    theme = KITTY_DEFAULT.to_theme()
+    assert Palette.from_theme({**theme, "bg": "#fdf6e3"}).bg == "#fdf6e3"
+    for bad in ({**theme, "fg": evil}, {**theme, "bg": 'rgb("/><script>)'},
+                {**theme, "palette": ":".join([evil] + list(KITTY_DEFAULT.colors[1:]))},
+                {**theme, "palette": "#000000:#ffffff"}):
+        with pytest.raises(ValueError):
+            Palette.from_theme(bad)
+
+
+def test_resolve_rejects_malformed_hash_values():
+    assert KITTY_DEFAULT.resolve('#"/><script>', "#123456") == "#123456"
+    assert KITTY_DEFAULT.resolve("#333", "#123456") == "#333"

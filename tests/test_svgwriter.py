@@ -173,7 +173,7 @@ def test_no_loop_uses_delays():
     w.add_frame(0.0, [patch(0, 0, ["a"])])
     w.add_frame(1.25, [patch(0, 0, ["b"])])
     svg = w.to_string()
-    assert '[class^=t]{visibility:hidden;animation:s 1ms steps(1,end) forwards}' in svg
+    assert '[class^=t]{visibility:hidden;animation:s 1ms steps(1,start) forwards}' in svg
     assert '@keyframes s{to{visibility:visible}}' in svg
     assert '.t1{animation-delay:1.25s}' in svg
     assert 'infinite' not in svg

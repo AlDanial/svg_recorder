@@ -8,4 +8,5 @@ build/
 .pytest_cache/
 .coverage
 recording-*.svg
+recording-*.html
 recording-*.cast

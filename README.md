@@ -5,6 +5,7 @@ Record a terminal session as a small animated SVG.
     svg_recorder            # opens a shell; exit the shell to stop recording
     svg_recorder "cmd"      # records one command and stops when it exits
     svg_recorder render recording.cast -o out.svg
+    svg_recorder render recording.cast -o out.svg --html   # also writes out.html
 
 Pre-commands run in a non-interactive shell, so put aliases in your shell rc file rather than in pre-commands.
 
@@ -37,9 +38,28 @@ options:
   --cursor              render the cursor
   --no-loop             play once instead of looping
   --gzip                write gzip compressed output to a .svgz file
+  --html                also write an .html page that plays the SVG with
+                        playback controls
 ```
 
 Use 'svg_recorder render FILE.cast' to render a saved recording.
+
+## HTML player
+
+`--html` writes a page next to the SVG (`out.svg` gives `out.html`) that
+embeds the recording and adds play/pause, restart, a scrubber and a speed
+control.  Keys: space plays or pauses, the left and right arrows seek one
+second, `,` and `.` step 50 ms, `r` restarts.
+
+The page is a single self-contained file with no external scripts, styles or
+fonts, so it can be opened straight from disk or published as is, for example
+on GitHub Pages: commit `out.html` to the Pages branch and open
+`https://USER.github.io/REPO/out.html`.  It needs no Jekyll configuration and
+can be embedded in another page with an `<iframe>`.  The page carries its own
+copy of the recording, so the `.svg` file does not have to be published with it.
+Two things to watch: `--html` replaces any existing `.html` file of the same
+name (so `-o index.svg --html` overwrites `index.html`), and GitHub Pages does
+not publish files whose names start with `_` or `.`.
 
 ## Benchmarks
 

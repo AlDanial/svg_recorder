@@ -189,7 +189,11 @@ class SvgWriter:
                     style.append(f".{name}{{animation:a{name[1:]} {fmt(duration)}s steps(1,end) infinite}}"
                                  f"@keyframes a{name[1:]}{{0%{{visibility:hidden}}{pct}%{{visibility:visible}}}}")
             else:
-                style.append("[class^=t]{visibility:hidden;animation:s 1ms steps(1,end) forwards}"
+                # steps(1,start), not steps(1,end): the frame shows from the first
+                # instant of its 1 ms reveal.  With steps(1,end) it only shows once
+                # the reveal is over, and Chrome computes the progress of some
+                # finished reveals as just under 1, leaving those frames hidden.
+                style.append("[class^=t]{visibility:hidden;animation:s 1ms steps(1,start) forwards}"
                              "@keyframes s{to{visibility:visible}}")
                 for key, name in times.items():
                     style.append(f".{name}{{animation-delay:{fmt(key)}s}}")

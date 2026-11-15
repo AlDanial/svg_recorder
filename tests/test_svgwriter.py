@@ -42,33 +42,61 @@ def test_one_row_patch_positions_and_erase_rect():
     assert 'class="e"' not in w.to_string()
 
 
-def test_multi_row_patch_uses_tspans():
+def test_multi_row_patch_emits_one_text_per_row():
     w = SvgWriter(KITTY_DEFAULT, 10, 3)
     w.add_frame(0.0, [patch(1, 0, ["ab", "cd"])])
     svg = w.to_string()
-    assert ('<text x="8" y="13"><tspan textLength="16">ab</tspan>'
-            '<tspan x="8" y="30" textLength="16">cd</tspan></text>') in svg
+    assert ('<text x="8" y="13" textLength="16">ab</text>'
+            '<text x="8" y="30" textLength="16">cd</text>') in svg
+
+
+def test_every_run_is_its_own_text_element():
+    # Firefox ignores textLength on <tspan>, so a run inside a shared <text>
+    # is laid out at the font's natural advance and pushes every later run on
+    # the row sideways.  Each run is pinned to its cells by its own <text>.
+    w = SvgWriter(KITTY_DEFAULT, 10, 2)
+    rows = ((cell("a"), cell("b"), cell("c", fg="red"), cell("d", fg="red"), cell("e")),)
+    w.add_frame(0.0, [Patch(1, 0, 5, rows, False)])
+    svg = w.to_string()
+    assert "<tspan" not in svg
+    assert '<text x="8" y="13" textLength="16">ab</text>' in svg
+    assert re.search(r'<text x="24" y="13" textLength="16" class="f\d+">cd</text>', svg)
+    assert '<text x="40" y="13" textLength="8">e</text>' in svg
+
+
+def test_blank_runs_emit_no_text_unless_underlined():
+    w = SvgWriter(KITTY_DEFAULT, 10, 2)
+    rows = ((cell("a"), cell(" ", fg="red"), cell(" ", fg="red"), cell("b")),)
+    w.add_frame(0.0, [Patch(0, 0, 4, rows, False)])
+    svg = w.to_string()
+    assert svg.count("<text") == 2
+    assert '<text x="24" y="13" textLength="8">b</text>' in svg
+
+    w = SvgWriter(KITTY_DEFAULT, 10, 2)
+    rows = ((cell("a"), cell(" ", underline=True), cell(" ", underline=True), cell("b")),)
+    w.add_frame(0.0, [Patch(0, 0, 4, rows, False)])
+    assert '<text x="8" y="13" textLength="16" class="u">  </text>' in w.to_string()
 
 
 def test_middle_blank_row_does_not_shift_later_rows():
-    # A middle row made only of continuation cells (char == "") emits no tspan
+    # A middle row made only of continuation cells (char == "") emits no text
     # at all; absolute y on every later row keeps them in place.
     w = SvgWriter(KITTY_DEFAULT, 10, 4)
     w.add_frame(0.0, [Patch(0, 0, 1, ((cell("a"),), (cell(""),), (cell("b"),)), False)])
     svg = w.to_string()
-    assert '<tspan x="0" y="47" textLength="8">b</tspan>' in svg
-    assert svg.count("<tspan") == 2          # the empty middle row is skipped
-    assert "></tspan>" not in svg
+    assert '<text x="0" y="47" textLength="8">b</text>' in svg
+    assert svg.count("<text") == 2          # the empty middle row is skipped
+    assert "></text>" not in svg
 
 
 def test_row_starting_with_continuation_cell_shifts_x():
     # The leading continuation cell carries no text, so its width folds into
-    # the x of the run that does: an empty <tspan> would be ignored by browsers.
+    # the x of the run that does.
     w = SvgWriter(KITTY_DEFAULT, 10, 2)
     w.add_frame(0.0, [Patch(0, 0, 3, ((cell(""), cell("a", fg="red"), cell("b", fg="red")),), False)])
     svg = w.to_string()
-    assert "></tspan>" not in svg
-    assert re.search(r'<text x="8" y="13"><tspan textLength="16" class="f\d+">ab</tspan></text>', svg)
+    assert "></text>" not in svg
+    assert re.search(r'<text x="8" y="13" textLength="16" class="f\d+">ab</text>', svg)
 
     # ... and the same for a later row, which carries its own x.
     w = SvgWriter(KITTY_DEFAULT, 10, 3)
@@ -76,8 +104,8 @@ def test_row_starting_with_continuation_cell_shifts_x():
                             ((cell("a"), cell("b")),
                              (cell(""), cell("c", fg="red"))), False)])
     svg = w.to_string()
-    assert "></tspan>" not in svg
-    assert re.search(r'<tspan x="16" y="30" textLength="8" class="f\d+">c</tspan>', svg)
+    assert "></text>" not in svg
+    assert re.search(r'<text x="16" y="30" textLength="8" class="f\d+">c</text>', svg)
 
 
 def test_fully_empty_row_patch_emits_no_text():
@@ -105,8 +133,9 @@ def test_styles_become_classes_defined_once():
     assert re.search(r'\.g\d+\{fill:#ff8700\}', svg)
     assert '.b{font-weight:bold}' in svg
     assert re.search(r'<rect x="16" y="0" width="8" height="17" class="g\d+"/>', svg)
-    assert re.search(r'<tspan textLength="24" class="f\d+ b">ab</tspan>', svg) is None
-    assert re.search(r'<tspan textLength="16" class="f\d+ b">ab</tspan><tspan textLength="8">c</tspan>', svg)
+    assert re.search(r'<text x="0" y="13" textLength="24" class="f\d+ b">ab</text>', svg) is None
+    assert re.search(r'<text x="0" y="13" textLength="16" class="f\d+ b">ab</text>'
+                     r'<text x="16" y="13" textLength="8">c</text>', svg)
 
 
 def test_reverse_swaps_colors():

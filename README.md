@@ -13,6 +13,30 @@ While a recording is in progress the terminal's title bar reads
 programs set. The title is restored when recording stops and never appears in
 the SVG.
 
+## Annotating an SVG
+
+    svg_recorder --annotate notes.txt demo.svg      # writes demo-annotated.svg
+
+adds a footer of timed notes below an existing SVG. Each line of the
+annotation file is a time offset, written `M:S` or `M:S.F`, followed by the
+text to show from that time until the next note:
+
+    0:01.1  Hello
+    0:05.5  welcome to this recording
+    0:09
+
+The footer is blank until 0:01.1, shows "Hello" until 0:05.5, then "welcome to
+this recording" until 0:09, where a time with no text blanks it again. Notes
+wider than the SVG wrap onto extra footer rows. `--footer-colors`, `-o`,
+`--gzip` and `--html` apply; an SVG that already has a footer gets the notes as
+a second one beneath it.
+
+When the annotation file is read:
+
+- spaces and tabs before the time offset are ignored, so lines may be indented;
+- blank lines are ignored;
+- a line whose first non-blank character is `#` is a comment and is ignored.
+
 Pre-commands run in a non-interactive shell, so put aliases in your shell rc file rather than in pre-commands.
 
 The SVG animates inside an `<img>` tag on GitHub and PyPI. On PyPI the README
@@ -24,7 +48,8 @@ resolve relative paths.
 ```
 positional arguments:
   command               command to record; omit for an interactive shell. An existing .cast file is
-                        rendered instead of recorded
+                        rendered instead of recorded. With --annotate, the existing .svg file to add
+                        notes to
 
 options:
   -h, --help            show this help message and exit
@@ -34,15 +59,15 @@ options:
   -F, --pre-commands-file FILE
                         file of shell commands to run before recording starts
   --keep-recording      keep the intermediate .cast file next to the SVG
+  -a, --annotate FILE   add a footer of timed notes to an existing SVG, given in place of the command;
+                        each line of FILE is a time (M:S or M:S.F) followed by the text to show from then on
   -t, --time-delta SECONDS
                         seconds between frame captures (default 0.05)
   --time-compress X     shorten pauses spent waiting for a keystroke to at most X seconds; works with a
                         command to record or an existing .cast file
   -f, --footer          show the last keystrokes in a footer row
-  -a, --annotation FILE
-                        with --footer, add a row describing the current keystroke
   --footer-colors BG FG
-                        footer background and text colors
+                        footer background and text colors, also used by --annotate
   -o, --output FILE     SVG output file
   --cursor              render the cursor
   --no-loop             play once instead of looping

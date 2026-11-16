@@ -6,7 +6,6 @@ from typing import Iterator
 
 import pyte
 
-from .annotations import Annotations
 from .asciicast import Event, Header
 from .keys import KeyDecoder
 from .patches import BLANK, Cell, Frame
@@ -16,16 +15,15 @@ BOLD_SECONDS = 2.0
 
 
 class Footer:
-    def __init__(self, width: int, colors: tuple[str, str], annotations: Annotations | None = None):
+    def __init__(self, width: int, colors: tuple[str, str]):
         self.width = width
         self.bg, self.fg = colors
-        self.annotations = annotations
         self._keys: list[str] = []
         self._last_t: float | None = None
 
     @property
     def height(self) -> int:
-        return 2 if self.annotations else 1
+        return 1
 
     def push_key(self, t: float, name: str) -> None:
         self._keys = (self._keys + [name])[-FOOTER_KEYS:]
@@ -44,19 +42,14 @@ class Footer:
             cells.append(Cell(ch, self.fg, self.bg, bold, False, False, False))
         return cells
 
-    def rows(self, t: float, screen_rows: list[str]) -> list[list[Cell]]:
+    def rows(self, t: float) -> list[list[Cell]]:
         bold_from = -1
         line = ""
         if self._keys:
             line = " ".join(self._keys)
             if self._last_t is not None and t - self._last_t < BOLD_SECONDS:
                 bold_from = len(line) - len(self._keys[-1])
-        out = [self._line(line, bold_from)]
-        if self.annotations:
-            mode = self.annotations.detect_mode(screen_rows)
-            key = self._keys[-1] if self._keys else None
-            out.append(self._line(self.annotations.describe(mode, key)))
-        return out
+        return [self._line(line, bold_from)]
 
 
 class Sampler:
@@ -84,7 +77,7 @@ class Sampler:
         decoder = KeyDecoder()
         rows: list[list[Cell]] = [[BLANK] * w for _ in range(h)]
         if self.footer:
-            rows += self.footer.rows(0.0, [""] * h)
+            rows += self.footer.rows(0.0)
         prev_cursor_row: int | None = None
         idx = 0
         tick_no = 0
@@ -125,8 +118,7 @@ class Sampler:
                     rows[r] = candidate
             prev_cursor_row = cur_cursor_row
             if self.footer:
-                texts = ["".join(c.char for c in rows[r]) for r in range(h)]
-                for i, new_row in enumerate(self.footer.rows(t, texts)):
+                for i, new_row in enumerate(self.footer.rows(t)):
                     if new_row != rows[h + i]:
                         rows[h + i] = new_row
             yield t, list(rows)

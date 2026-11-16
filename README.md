@@ -36,7 +36,8 @@ options:
   --keep-recording      keep the intermediate .cast file next to the SVG
   -t, --time-delta SECONDS
                         seconds between frame captures (default 0.05)
-  --time-compress X     shorten pauses spent waiting for a keystroke to at most X seconds
+  --time-compress X     shorten pauses spent waiting for a keystroke to at most X seconds; works with a
+                        command to record or an existing .cast file
   -f, --footer          show the last keystrokes in a footer row
   -a, --annotation FILE
                         with --footer, add a row describing the current keystroke

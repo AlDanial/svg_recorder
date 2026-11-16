@@ -46,7 +46,8 @@ def _add_render_options(p: argparse.ArgumentParser) -> None:
     p.add_argument("-t", "--time-delta", type=float, default=0.05, metavar="SECONDS",
                    help="seconds between frame captures (default 0.05)")
     p.add_argument("--time-compress", type=_seconds, metavar="X",
-                   help="shorten pauses spent waiting for a keystroke to at most X seconds")
+                   help="shorten pauses spent waiting for a keystroke to at most X seconds; "
+                        "works with a command to record or an existing .cast file")
     p.add_argument("-f", "--footer", action="store_true", help="show the last keystrokes in a footer row")
     p.add_argument("-a", "--annotation", metavar="FILE",
                    help="with --footer, add a row describing the current keystroke")

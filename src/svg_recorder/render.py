@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from .annotations import Annotations
 from .asciicast import Event, Header, read
 from .keys import ESC_TIMEOUT
 from .patches import blank_frame, diff_frames
@@ -24,7 +23,6 @@ class RenderOptions:
     cursor: bool = False
     footer: bool = False
     footer_colors: tuple[str, str] = ("#303030", "#f0f0f0")
-    annotations: Annotations | None = None
     time_compress: float | None = None
 
 
@@ -66,7 +64,7 @@ def compress_time(events: list[Event], limit: float) -> list[Event]:
 def render_events(header: Header, events: list[Event], opts: RenderOptions) -> str:
     if opts.time_compress is not None:
         events = compress_time(events, opts.time_compress)
-    footer = Footer(header.width, opts.footer_colors, opts.annotations) if opts.footer else None
+    footer = Footer(header.width, opts.footer_colors) if opts.footer else None
     sampler = Sampler(header, events, opts.time_delta, footer, opts.cursor)
     total_rows = header.height + (footer.height if footer else 0)
     writer = SvgWriter(header.palette, header.width, total_rows, header.cell,

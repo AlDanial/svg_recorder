@@ -28,20 +28,13 @@ def test_render_subcommand_writes_svg(tmp_path):
     assert ">hi</text>" in svg and "infinite" not in svg
 
 
-def test_render_footer_and_annotation_options(tmp_path):
-    # Footer text is truncated to the terminal width (screen.py Footer._line,
-    # by design -- see test_footer_truncates_to_width in test_screen.py), so
-    # this cast needs a wider terminal than the 10-column default to fit the
-    # full "key k does things" annotation description.
+def test_render_footer_options(tmp_path):
     cast = make_cast(tmp_path / "a.cast", width=20)
-    ann = tmp_path / "ann.txt"
-    ann.write_text("mode m hi\nm k key k does things\n")
     out = tmp_path / "a.svg"
-    rc = cli.main(["render", str(cast), "-o", str(out), "-f", "-a", str(ann),
-                   "--footer-colors", "#111111", "#eeeeee"])
+    rc = cli.main(["render", str(cast), "-o", str(out), "-f", "--footer-colors", "#111111", "#eeeeee"])
     assert rc == 0
     svg = out.read_text()
-    assert "key k does things" in svg and "#111111" in svg
+    assert ">k</text>" in svg and "#111111" in svg
 
 
 def test_gzip_output(tmp_path):
@@ -74,14 +67,6 @@ def test_record_flow_gzip_uses_svgz(tmp_path, monkeypatch):
     assert cli.main(["-o", str(tmp_path / "s.svg"), "--gzip", "--keep-recording"]) == 0
     assert (tmp_path / "s.svgz").exists() and not (tmp_path / "s.svg").exists()
     assert (tmp_path / "s.cast").exists()
-
-
-def test_bad_annotation_file_fails_before_recording(tmp_path, capsys):
-    ann = tmp_path / "ann.txt"
-    ann.write_text("mode\n")
-    rc = cli.main(["-f", "-a", str(ann), "true"])
-    assert rc == 2
-    assert "line 1" in capsys.readouterr().err
 
 
 def test_missing_pre_commands_file_fails(tmp_path, capsys):
@@ -348,3 +333,85 @@ def test_a_missing_cast_name_is_still_a_command_to_record(tmp_path):
     assert not _is_cast_file(str(tmp_path / "notes.txt"))
     (tmp_path / "UP.CAST").write_text("x")
     assert _is_cast_file(str(tmp_path / "UP.CAST"))
+
+
+def _svg_to_annotate(tmp_path, name="demo.svg", extra=()):
+    cast = _cast(tmp_path)                                    # 4.01 s of events: loops every 6.05 s
+    assert cli.main(["render", str(cast), "-o", str(tmp_path / name), *extra]) == 0
+    return tmp_path / name
+
+
+def _notes(tmp_path, text="0:01.1  Hello\n0:03.5  welcome to this recording\n"):
+    path = tmp_path / "notes.txt"
+    path.write_text(text)
+    return path
+
+
+def test_annotate_writes_a_new_svg_with_a_timed_footer(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli, "get_recorder", lambda: pytest.fail("must not record"))
+    source = _svg_to_annotate(tmp_path)
+    before = source.read_text()
+    assert cli.main(["--annotate", str(_notes(tmp_path)), str(source)]) == 0
+    out = (tmp_path / "demo-annotated.svg").read_text()
+    assert source.read_text() == before                       # the input is left as it was
+    assert 'height="51"' in before and 'height="85"' in out   # 20 columns: the second note wraps
+    assert ">Hello</text>" in out and ">welcome to this</text>" in out and ">recording</text>" in out
+    assert "wrote demo-annotated.svg" in capsys.readouterr().err
+
+
+def test_annotate_honors_output_colors_gzip_and_html(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    source = _svg_to_annotate(tmp_path)
+    rc = cli.main(["-a", str(_notes(tmp_path)), str(source), "-o", "out.svg", "--gzip", "--html",
+                   "--footer-colors", "#123456", "#abcdef"])
+    assert rc == 0
+    svg = gzip.decompress((tmp_path / "out.svgz").read_bytes()).decode()
+    assert "fill:#123456" in svg and "fill:#abcdef" in svg
+    assert ">Hello</text>" in (tmp_path / "out.html").read_text()
+    # A compressed SVG can be annotated in turn, giving it a second notes footer.
+    assert cli.main(["-a", str(_notes(tmp_path, "0:02 again\n")), "out.svgz", "-o", "two.svg"]) == 0
+    two = (tmp_path / "two.svg").read_text()
+    assert ">Hello</text>" in two and ">again</text>" in two and 'height="102"' in two
+
+
+def test_annotate_warns_about_notes_after_the_end(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    source = _svg_to_annotate(tmp_path)
+    assert cli.main(["-a", str(_notes(tmp_path, "0:01 seen\n1:00 late\n")), str(source)]) == 0
+    assert "left out 1 note(s)" in capsys.readouterr().err
+    out = (tmp_path / "demo-annotated.svg").read_text()
+    assert "seen" in out and "late" not in out
+
+
+def test_annotate_input_errors(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli, "get_recorder", lambda: pytest.fail("must not record"))
+    source = _svg_to_annotate(tmp_path)
+    notes = _notes(tmp_path)
+
+    def fails(argv, *expect):
+        assert cli.main(argv) == 2
+        err = capsys.readouterr().err
+        for text in expect:
+            assert text in err, err
+
+    fails(["-a", str(notes)], "needs an existing .svg file")
+    fails(["-a", str(notes), "echo hi"], "needs an existing .svg file", "echo hi")
+    fails(["-a", str(tmp_path / "absent.txt"), str(source)], "annotation file", "absent.txt")
+    fails(["-a", str(_notes(tmp_path, "0:01 ok\nsoon: no\n")), str(source)], "line 2", "notes.txt")
+    (tmp_path / "not.svg").write_text("just text")
+    fails(["-a", str(_notes(tmp_path)), "not.svg"], "not.svg", "no <svg> element")
+    (tmp_path / "bad.svgz").write_bytes(b"\x1f\x8bgarbage")
+    fails(["-a", str(notes), "bad.svgz"], "bad.svgz")
+    for flag in (["-c", "ls"], ["-F", "f"], ["--keep-recording"], ["--time-compress", "1"],
+                 ["-f"], ["--cursor"], ["--no-loop"]):
+        fails(["-a", str(notes), str(source), *flag], flag[0] if flag[0].startswith("--") else "cannot be used")
+    assert not (tmp_path / "demo-annotated.svg").exists()
+
+
+def test_the_old_annotation_switch_is_gone(tmp_path, capsys):
+    with pytest.raises(SystemExit):
+        cli.main(["--annotation", "x", "true"])
+    with pytest.raises(SystemExit):
+        cli.main(["render", str(make_cast(tmp_path / "a.cast")), "-a", "x"])

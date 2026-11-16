@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import __version__
-from .annotations import AnnotationError, load_annotations
+from .annotations import AnnotationError, SvgError, annotate_svg, load_annotations, loop_duration
 from .asciicast import CastError
 from .html import wrap_svg
 from .recorder import RecordError, get_recorder
@@ -49,10 +49,8 @@ def _add_render_options(p: argparse.ArgumentParser) -> None:
                    help="shorten pauses spent waiting for a keystroke to at most X seconds; "
                         "works with a command to record or an existing .cast file")
     p.add_argument("-f", "--footer", action="store_true", help="show the last keystrokes in a footer row")
-    p.add_argument("-a", "--annotation", metavar="FILE",
-                   help="with --footer, add a row describing the current keystroke")
     p.add_argument("--footer-colors", nargs=2, metavar=("BG", "FG"), default=["#303030", "#f0f0f0"],
-                   help="footer background and text colors")
+                   help="footer background and text colors, also used by --annotate")
     p.add_argument("-o", "--output", metavar="FILE", help="SVG output file")
     p.add_argument("--cursor", action="store_true", help="render the cursor")
     p.add_argument("--no-loop", action="store_true", help="play once instead of looping")
@@ -68,7 +66,8 @@ def build_parsers() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     rec = argparse.ArgumentParser(prog="svg_recorder",
                                   description="Record a terminal session as a small animated SVG.",
                                   epilog="Use 'svg_recorder FILE.cast' or 'svg_recorder render FILE.cast' "
-                                         "to render a saved recording.")
+                                         "to render a saved recording, and "
+                                         "'svg_recorder --annotate NOTES FILE.svg' to add timed notes to an SVG.")
     rec.add_argument("-v", "--version", action="version", version=f"svg_recorder {__version__}")
     rec.add_argument("-c", "--pre-commands", metavar="COMMANDS",
                      help="semicolon delimited shell commands to run before recording starts")
@@ -76,10 +75,14 @@ def build_parsers() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
                      help="file of shell commands to run before recording starts")
     rec.add_argument("--keep-recording", action="store_true",
                      help="keep the intermediate .cast file next to the SVG")
+    rec.add_argument("-a", "--annotate", metavar="FILE",
+                     help="add a footer of timed notes to an existing SVG, given in place of the command; "
+                          "each line of FILE is a time (M:S or M:S.F) followed by the text to show from then on")
     _add_render_options(rec)
     rec.add_argument("command", nargs="?",
                      help="command to record; omit for an interactive shell. "
-                          "An existing .cast file is rendered instead of recorded")
+                          "An existing .cast file is rendered instead of recorded. "
+                          "With --annotate, the existing .svg file to add notes to")
 
     ren = argparse.ArgumentParser(prog="svg_recorder render",
                                   description="Render a saved recording to SVG.")
@@ -99,7 +102,6 @@ def read_pre_commands(args: argparse.Namespace) -> list[str]:
 
 
 def options_from_args(args: argparse.Namespace) -> RenderOptions:
-    annotations = load_annotations(args.annotation) if args.annotation else None
     return RenderOptions(
         time_delta=args.time_delta,
         gap=args.gap,
@@ -107,9 +109,8 @@ def options_from_args(args: argparse.Namespace) -> RenderOptions:
         dedup=not args.no_dedup,
         loop=not args.no_loop,
         cursor=args.cursor,
-        footer=args.footer or bool(args.annotation),
+        footer=args.footer,
         footer_colors=(args.footer_colors[0], args.footer_colors[1]),
-        annotations=annotations,
         time_compress=args.time_compress,
     )
 
@@ -161,10 +162,7 @@ def _is_cast_file(command: str | None) -> bool:
 
 def _render(args: argparse.Namespace) -> int:
     """Render the saved recording args.cast to SVG."""
-    try:
-        opts = options_from_args(args)
-    except (AnnotationError, OSError) as e:
-        return _fail(f"annotation file: {e}")
+    opts = options_from_args(args)
     output = _output_path(args.output, Path(args.cast).with_suffix(".svg").name, args.gzip)
     if clash := _html_clash(output, args.html):
         return _fail(clash)
@@ -172,6 +170,61 @@ def _render(args: argparse.Namespace) -> int:
         svg = render_cast(args.cast, opts)
         _write_outputs(svg, output, args.gzip, args.html)
     except (CastError, OSError) as e:
+        return _fail(str(e))
+    return 0
+
+
+# Options that shape a recording or its rendering and so mean nothing to --annotate.
+_NOT_WITH_ANNOTATE = {
+    "pre_commands": "--pre-commands", "pre_commands_file": "--pre-commands-file",
+    "keep_recording": "--keep-recording", "time_compress": "--time-compress",
+    "footer": "--footer", "cursor": "--cursor", "no_loop": "--no-loop",
+}
+
+
+def _read_svg(path: Path) -> str:
+    """The text of an .svg file, or of a gzip compressed .svgz one."""
+    data = path.read_bytes()
+    if data[:2] == b"\x1f\x8b":
+        data = gzip.decompress(data)
+    return data.decode("utf-8")
+
+
+def _annotate(args: argparse.Namespace) -> int:
+    """Add the notes in args.annotate as a footer to the SVG named as the command."""
+    if not args.command:
+        return _fail("--annotate needs an existing .svg file to add the notes to")
+    source = Path(args.command)
+    if not source.is_file():
+        return _fail(f"--annotate needs an existing .svg file, and {source} is not one")
+    unused = [flag for dest, flag in _NOT_WITH_ANNOTATE.items()
+              if getattr(args, dest) not in (None, False)]
+    if unused:
+        return _fail(f"{', '.join(unused)} cannot be used with --annotate, which only adds notes to an SVG")
+    try:
+        notes = load_annotations(args.annotate)
+    except AnnotationError as e:
+        return _fail(f"annotation file {args.annotate}: {e}")
+    except (OSError, UnicodeDecodeError) as e:
+        return _fail(f"annotation file: {e}")
+    output = _output_path(args.output, source.stem + "-annotated.svg", args.gzip)
+    if clash := _html_clash(output, args.html):
+        return _fail(clash)
+    try:
+        svg = _read_svg(source)
+        duration = loop_duration(svg)
+        annotated = annotate_svg(svg, notes, (args.footer_colors[0], args.footer_colors[1]))
+    except (OSError, EOFError, UnicodeDecodeError) as e:  # EOFError: a truncated .svgz
+        return _fail(f"{source}: {e}")
+    except SvgError as e:
+        return _fail(f"{source}: {e}")
+    late = [t for t, _ in notes if duration is not None and t >= duration]
+    if late:
+        print(f"svg_recorder: left out {len(late)} note(s) timed at or after the end of the "
+              f"{duration:g} second animation", file=sys.stderr)
+    try:
+        _write_outputs(annotated, output, args.gzip, args.html)
+    except OSError as e:
         return _fail(str(e))
     return 0
 
@@ -184,6 +237,8 @@ def main(argv: list[str] | None = None) -> int:
         return _render(ren_parser.parse_args(argv[1:]))
 
     args = rec_parser.parse_args(argv)
+    if args.annotate:
+        return _annotate(args)
     if _is_cast_file(args.command):
         # 'svg_recorder FILE.cast' is shorthand for 'svg_recorder render FILE.cast'.
         if args.pre_commands or args.pre_commands_file or args.keep_recording:
@@ -191,12 +246,7 @@ def main(argv: list[str] | None = None) -> int:
                          "--pre-commands, --pre-commands-file and --keep-recording do not apply")
         args.cast = args.command
         return _render(args)
-    try:
-        opts = options_from_args(args)
-    except AnnotationError as e:
-        return _fail(f"annotation file {args.annotation}: {e}")
-    except OSError as e:
-        return _fail(f"annotation file: {e}")
+    opts = options_from_args(args)
     try:
         pre_commands = read_pre_commands(args)
     except OSError as e:

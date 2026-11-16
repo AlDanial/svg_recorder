@@ -31,9 +31,22 @@ def _output_path(name: str | None, default: str, compress: bool) -> Path:
     return path
 
 
+def _seconds(text: str) -> float:
+    """An argparse type for a duration: a finite number that is not negative."""
+    try:
+        value = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a number of seconds: {text!r}") from None
+    if not (0 <= value < float("inf")):
+        raise argparse.ArgumentTypeError(f"seconds must be 0 or more: {text!r}")
+    return value
+
+
 def _add_render_options(p: argparse.ArgumentParser) -> None:
     p.add_argument("-t", "--time-delta", type=float, default=0.05, metavar="SECONDS",
                    help="seconds between frame captures (default 0.05)")
+    p.add_argument("--time-compress", type=_seconds, metavar="X",
+                   help="shorten pauses spent waiting for a keystroke to at most X seconds")
     p.add_argument("-f", "--footer", action="store_true", help="show the last keystrokes in a footer row")
     p.add_argument("-a", "--annotation", metavar="FILE",
                    help="with --footer, add a row describing the current keystroke")
@@ -53,7 +66,8 @@ def _add_render_options(p: argparse.ArgumentParser) -> None:
 def build_parsers() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     rec = argparse.ArgumentParser(prog="svg_recorder",
                                   description="Record a terminal session as a small animated SVG.",
-                                  epilog="Use 'svg_recorder render FILE.cast' to render a saved recording.")
+                                  epilog="Use 'svg_recorder FILE.cast' or 'svg_recorder render FILE.cast' "
+                                         "to render a saved recording.")
     rec.add_argument("-v", "--version", action="version", version=f"svg_recorder {__version__}")
     rec.add_argument("-c", "--pre-commands", metavar="COMMANDS",
                      help="semicolon delimited shell commands to run before recording starts")
@@ -62,7 +76,9 @@ def build_parsers() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     rec.add_argument("--keep-recording", action="store_true",
                      help="keep the intermediate .cast file next to the SVG")
     _add_render_options(rec)
-    rec.add_argument("command", nargs="?", help="command to record; omit for an interactive shell")
+    rec.add_argument("command", nargs="?",
+                     help="command to record; omit for an interactive shell. "
+                          "An existing .cast file is rendered instead of recorded")
 
     ren = argparse.ArgumentParser(prog="svg_recorder render",
                                   description="Render a saved recording to SVG.")
@@ -93,6 +109,7 @@ def options_from_args(args: argparse.Namespace) -> RenderOptions:
         footer=args.footer or bool(args.annotation),
         footer_colors=(args.footer_colors[0], args.footer_colors[1]),
         annotations=annotations,
+        time_compress=args.time_compress,
     )
 
 
@@ -136,27 +153,43 @@ def _fail(msg: str) -> int:
     return 2
 
 
+def _is_cast_file(command: str | None) -> bool:
+    """True when the 'command' to record is really a saved recording to render."""
+    return bool(command) and command.lower().endswith(".cast") and Path(command).is_file()
+
+
+def _render(args: argparse.Namespace) -> int:
+    """Render the saved recording args.cast to SVG."""
+    try:
+        opts = options_from_args(args)
+    except (AnnotationError, OSError) as e:
+        return _fail(f"annotation file: {e}")
+    output = _output_path(args.output, Path(args.cast).with_suffix(".svg").name, args.gzip)
+    if clash := _html_clash(output, args.html):
+        return _fail(clash)
+    try:
+        svg = render_cast(args.cast, opts)
+        _write_outputs(svg, output, args.gzip, args.html)
+    except (CastError, OSError) as e:
+        return _fail(str(e))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else list(argv)
     rec_parser, ren_parser = build_parsers()
 
     if argv and argv[0] == "render":
-        args = ren_parser.parse_args(argv[1:])
-        try:
-            opts = options_from_args(args)
-        except (AnnotationError, OSError) as e:
-            return _fail(f"annotation file: {e}")
-        output = _output_path(args.output, Path(args.cast).with_suffix(".svg").name, args.gzip)
-        if clash := _html_clash(output, args.html):
-            return _fail(clash)
-        try:
-            svg = render_cast(args.cast, opts)
-            _write_outputs(svg, output, args.gzip, args.html)
-        except (CastError, OSError) as e:
-            return _fail(str(e))
-        return 0
+        return _render(ren_parser.parse_args(argv[1:]))
 
     args = rec_parser.parse_args(argv)
+    if _is_cast_file(args.command):
+        # 'svg_recorder FILE.cast' is shorthand for 'svg_recorder render FILE.cast'.
+        if args.pre_commands or args.pre_commands_file or args.keep_recording:
+            return _fail(f"{args.command} is a saved recording, which is rendered, not recorded; "
+                         "--pre-commands, --pre-commands-file and --keep-recording do not apply")
+        args.cast = args.command
+        return _render(args)
     try:
         opts = options_from_args(args)
     except AnnotationError as e:

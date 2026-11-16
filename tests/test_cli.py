@@ -2,6 +2,8 @@ import gzip
 import tempfile
 from datetime import datetime
 
+import pytest
+
 from svg_recorder import cli
 from svg_recorder.asciicast import Header, Writer
 from svg_recorder.palette import KITTY_DEFAULT
@@ -277,3 +279,72 @@ def test_cast_with_markup_in_theme_is_refused(tmp_path, capsys):
     assert cli.main(["render", str(cast), "-o", str(tmp_path / "e.svg"), "--html"]) == 2
     assert "line 1" in capsys.readouterr().err
     assert not (tmp_path / "e.svg").exists() and not (tmp_path / "e.html").exists()
+
+
+def test_time_compress_option_is_parsed_for_record_and_render():
+    from svg_recorder.cli import build_parsers, options_from_args
+    rec, ren = build_parsers()
+    assert options_from_args(rec.parse_args([])).time_compress is None
+    assert options_from_args(rec.parse_args(["--time-compress", "0.2"])).time_compress == 0.2
+    assert options_from_args(ren.parse_args(["x.cast", "--time-compress", "0"])).time_compress == 0.0
+
+
+def test_time_compress_rejects_negative_and_non_numeric_values(capsys):
+    import pytest
+    from svg_recorder.cli import build_parsers
+    rec, _ = build_parsers()
+    for bad in ("-1", "nan", "inf", "fast"):
+        with pytest.raises(SystemExit):
+            rec.parse_args([f"--time-compress={bad}"])
+    assert "--time-compress" in capsys.readouterr().err
+
+
+def _cast(tmp_path, name="typed.cast"):
+    from svg_recorder.asciicast import Header, Writer
+    from svg_recorder.palette import KITTY_DEFAULT
+    path = tmp_path / name
+    with Writer(path, Header(20, 3, 0, KITTY_DEFAULT)) as w:
+        w.write(0.0, "o", b"$ ")
+        w.write(4.0, "i", b"l")
+        w.write(4.01, "o", b"l")
+    return path
+
+
+def _loop_seconds(svg_path):
+    import re
+    return float(re.search(r"animation:a\d+ ([\d.]+)s", svg_path.read_text()).group(1))
+
+
+def test_cast_file_as_the_command_is_rendered_with_time_compress(tmp_path, monkeypatch):
+    from svg_recorder import cli
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli, "get_recorder", lambda: pytest.fail("must not record"))
+    cast = _cast(tmp_path)
+    assert cli.main(["--time-compress", "0.5", str(cast)]) == 0
+    assert _loop_seconds(tmp_path / "typed.svg") == 2.55     # 4 s wait cut to 0.5, plus the 2 s hold
+    assert cli.main([str(cast), "-o", "plain.svg"]) == 0
+    assert _loop_seconds(tmp_path / "plain.svg") == 6.05
+    assert cli.main(["render", str(cast), "--time-compress", "0.5", "-o", "r.svg"]) == 0
+    assert (tmp_path / "r.svg").read_text() == (tmp_path / "typed.svg").read_text()
+    assert cast.exists()
+
+
+def test_cast_file_with_recording_only_options_is_an_error(tmp_path, monkeypatch, capsys):
+    from svg_recorder import cli
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli, "get_recorder", lambda: pytest.fail("must not record"))
+    cast = _cast(tmp_path)
+    for extra in (["-c", "cd /"], ["-F", "pre.txt"], ["--keep-recording"]):
+        assert cli.main([*extra, str(cast)]) == 2
+    assert "saved recording" in capsys.readouterr().err
+    assert not (tmp_path / "typed.svg").exists()
+
+
+def test_a_missing_cast_name_is_still_a_command_to_record(tmp_path):
+    from svg_recorder.cli import _is_cast_file
+    assert not _is_cast_file(None)
+    assert not _is_cast_file(str(tmp_path / "absent.cast"))
+    (tmp_path / "notes.txt").write_text("x")
+    assert not _is_cast_file(str(tmp_path / "notes.txt"))
+    (tmp_path / "UP.CAST").write_text("x")
+    assert _is_cast_file(str(tmp_path / "UP.CAST"))

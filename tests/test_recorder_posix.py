@@ -169,3 +169,28 @@ def test_os_errors_from_the_pty_become_record_errors(tmp_path, monkeypatch):
     with pytest.raises(RecordError, match="out of ptys"):
         rec.record("true", [], tmp_path / "r.cast")
     term.close()
+
+
+def test_terminal_title_marks_the_recording_and_is_restored(tmp_path):
+    from svg_recorder.title import MARK, begin, end
+    term = FakeTerminal()
+    path = tmp_path / "r.cast"
+    record(term, "printf '\\033]0;my title\\007hi'", path=path)
+    term.close()
+    mark = MARK.encode()
+    assert begin() in term.seen
+    assert b"\x1b]0;" + mark + b" | my title\x07hi" in term.seen   # the program's title keeps the marker
+    assert term.seen.endswith(end())
+    _, events = read(path)
+    out = b"".join(d for _, k, d in events if k == "o")
+    assert out == b"\x1b]0;my title\x07hi"                          # the recording is untouched
+    assert mark not in path.read_bytes()
+
+
+def test_terminal_title_is_restored_when_recording_fails(tmp_path):
+    from svg_recorder.title import end
+    term = FakeTerminal()
+    with pytest.raises(RecordError):
+        record(term, "true", pre=["exit 3"], path=tmp_path / "r.cast")
+    term.close()
+    assert term.seen.endswith(end())

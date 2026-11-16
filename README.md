@@ -7,6 +7,11 @@ Record a terminal session as a small animated SVG.
     svg_recorder render recording.cast -o out.svg
     svg_recorder render recording.cast -o out.svg --html   # also writes out.html
 
+While a recording is in progress the terminal's title bar reads
+`🔴🔴🔴 RECORDING — svg_recorder 🔴🔴🔴`, in front of any title your shell or
+programs set. The title is restored when recording stops and never appears in
+the SVG.
+
 Pre-commands run in a non-interactive shell, so put aliases in your shell rc file rather than in pre-commands.
 
 The SVG animates inside an `<img>` tag on GitHub and PyPI. On PyPI the README

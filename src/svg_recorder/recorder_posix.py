@@ -18,6 +18,7 @@ from .asciicast import Header, Writer
 from .keys import utf8_len
 from .palette import KITTY_DEFAULT, OSC_QUERY, Palette, apply_osc_replies
 from .recorder import RecordError
+from .title import TitleFilter, begin as title_begin, end as title_end
 
 
 def build_script(pre_commands: list[str], command: str | None, shell: str, token: str) -> str:
@@ -61,6 +62,7 @@ class PosixRecorder:
         self.term_out = _fileno(sys.stdout) if term_out is None else term_out
         self.shell = shell or os.environ.get("SHELL") or "/bin/sh"
         self.query_timeout = query_timeout
+        self._titles = TitleFilter()
 
     # ----- helpers --------------------------------------------------------
 
@@ -100,6 +102,16 @@ class PosixRecorder:
             n = os.write(fd, data)
             data = data[n:]
 
+    def _show(self, data: bytes) -> None:
+        """Send program output to the terminal, keeping the recording title."""
+        self._write_all(self.term_out, self._titles.feed(data))
+
+    def _end_title(self) -> None:
+        try:
+            self._write_all(self.term_out, self._titles.flush() + title_end())
+        except OSError:  # the terminal is gone; nothing left to restore
+            pass
+
     # ----- main -----------------------------------------------------------
 
     def record(self, command: str | None, pre_commands: list[str], cast_path: Path) -> Header:
@@ -115,11 +127,15 @@ class PosixRecorder:
     def _record(self, command: str | None, pre_commands: list[str], cast_path: Path) -> Header:
         cols, lines = self._size()
         saved = None
+        titled = False
         if os.isatty(self.term_in):
             saved = termios.tcgetattr(self.term_in)
             tty.setraw(self.term_in, termios.TCSANOW)  # TCSANOW: do not flush pending input
         try:
             palette = self._query_palette()
+            self._titles = TitleFilter()
+            self._write_all(self.term_out, title_begin())
+            titled = True
             token = "SVGREC" + secrets.token_hex(8)
             script = build_script(pre_commands, command, self.shell, token)
             pid, master = pty.fork()
@@ -139,6 +155,8 @@ class PosixRecorder:
                 os.waitpid(pid, 0)
             return header
         finally:
+            if titled:
+                self._end_title()
             if saved is not None:
                 termios.tcsetattr(self.term_in, termios.TCSADRAIN, saved)
 
@@ -180,7 +198,7 @@ class PosixRecorder:
         t0 = time.monotonic()
         tail = b""  # a multibyte character straddling two reads
         if first:
-            self._write_all(self.term_out, first)
+            self._show(first)
             head, tail = split_utf8_tail(first)
             if head:
                 writer.write(0.0, "o", head)
@@ -194,7 +212,7 @@ class PosixRecorder:
                     if tail:
                         writer.write(time.monotonic() - t0, "o", tail)
                     return
-                self._write_all(self.term_out, data)
+                self._show(data)
                 head, tail = split_utf8_tail(tail + data)
                 if head:
                     writer.write(time.monotonic() - t0, "o", head)

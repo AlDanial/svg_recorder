@@ -6,6 +6,7 @@ Record a terminal session as a small animated SVG.
     svg_recorder "cmd"      # records one command and stops when it exits
     svg_recorder render recording.cast -o out.svg
     svg_recorder render recording.cast -o out.svg --html   # also writes out.html
+    svg_recorder --time-compress 0.3 recording.cast        # same as 'render'; writes recording.svg
 
 While a recording is in progress the terminal's title bar reads
 `🔴🔴🔴 RECORDING — svg_recorder 🔴🔴🔴`, in front of any title your shell or
@@ -22,7 +23,8 @@ resolve relative paths.
 
 ```
 positional arguments:
-  command               command to record; omit for an interactive shell
+  command               command to record; omit for an interactive shell. An existing .cast file is
+                        rendered instead of recorded
 
 options:
   -h, --help            show this help message and exit
@@ -34,6 +36,8 @@ options:
   --keep-recording      keep the intermediate .cast file next to the SVG
   -t, --time-delta SECONDS
                         seconds between frame captures (default 0.05)
+  --time-compress X     shorten pauses spent waiting for a keystroke to at most X seconds; works with a
+                        command to record or an existing .cast file
   -f, --footer          show the last keystrokes in a footer row
   -a, --annotation FILE
                         with --footer, add a row describing the current keystroke
